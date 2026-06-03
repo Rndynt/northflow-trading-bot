@@ -71,12 +71,11 @@ impl IndicatorEngine {
     pub fn next(&mut self, candle: Candle) -> Result<IndicatorSnapshot, NorthflowError> {
         candle.validate()?;
 
-        let ema_8 = self.ema_8.next(candle.close).ok();
-        let ema_21 = self.ema_21.next(candle.close).ok();
-        let ema_50 = self.ema_50.next(candle.close).ok();
-        let ema_200 = self.ema_200.next(candle.close).ok();
+        let ema_8 = Some(self.ema_8.next(candle.close)?);
+        let ema_21 = Some(self.ema_21.next(candle.close)?);
+        let ema_50 = Some(self.ema_50.next(candle.close)?);
+        let ema_200 = Some(self.ema_200.next(candle.close)?);
         let atr_14 = self.atr_14.next(candle)?;
-        // Use map to preserve the `Ok(Option)` → `Option` conversion.
         let vwap = self.vwap.next(candle)?;
         let volume_sma_20 = self.volume_sma_20.next(candle.volume)?;
 
@@ -160,6 +159,21 @@ mod tests {
             volume: 1.0,
         };
         assert!(e.next(bad).is_err());
+    }
+
+    #[test]
+    fn engine_next_propagates_invalid_candle_error() {
+        let mut e = IndicatorEngine::new_default().unwrap();
+        let bad = Candle {
+            timestamp: 1_700_000_000_000,
+            open: 100.0,
+            high: 80.0, // high < low — invalid geometry
+            low: 90.0,
+            close: 85.0,
+            volume: 1.0,
+        };
+        let result = e.next(bad);
+        assert!(result.is_err());
     }
 
     #[test]
