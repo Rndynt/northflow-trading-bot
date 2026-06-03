@@ -8,11 +8,17 @@
 //!   5. Replay 1m candles chronologically.
 //!   6. For each candle:
 //!      a. Handle pending entry (enter at candle open).
+//!         - Compute actual adverse entry price.
+//!         - Re-risk at actual price; soft-reject if invalid geometry or risk
+//!           guards reject; record RiskRejection row(s).
 //!      b. Check exit for open position (SL / TP / TimeExit) — even on entry candle.
 //!      c. Evaluate strategy — no lookahead across 5m / 15m; skipped on entry candle.
-//!      d. If signal approved by risk engine, set pending entry for next candle.
+//!         - Initial risk assessment at signal-close price; soft-reject and record
+//!           RiskRejection row(s) if rejected.
+//!      d. If signal pre-approved by initial risk check, set pending entry.
 //!   7. Close any remaining open position as EndOfBacktest.
-//!   8. Return BacktestResult.
+//!   8. Finalise SignalFlowSummary.
+//!   9. Return BacktestResult.
 //!
 //! Conservative intrabar rule: if SL and TP are both touched in the same candle,
 //! SL is assumed first.
@@ -23,13 +29,14 @@ use std::path::Path;
 
 use crate::backtest::fill_model::{FillModel, OpenSimPosition};
 use crate::backtest::metrics::{BacktestSummary, EquityPoint, Metrics};
+use crate::backtest::risk_trace::{RiskRejection, SignalFlowSummary};
 use crate::config::ResearchConfig;
 use crate::core::{
     Candle, NorthflowError, PositionId, Side, Signal, Symbol, Trade, TradeExitReason, TradeId,
 };
 use crate::indicators::{IndicatorEngine, IndicatorSnapshot};
 use crate::market::{CandleStore, OhlcvLoader};
-use crate::risk::{CostModelConfig, RiskConfig, RiskContext, RiskEngine};
+use crate::risk::{CostModelConfig, RiskContext, RiskEngine};
 use crate::strategy::{MultiTimeframeInput, ScreenedVwapScalp, Strategy, StrategyContext};
 
 // ── BacktestConfig ────────────────────────────────────────────────────────────
@@ -49,6 +56,8 @@ pub struct BacktestResult {
     pub trades: Vec<Trade>,
     pub equity_curve: Vec<EquityPoint>,
     pub summary: BacktestSummary,
+    pub risk_rejections: Vec<RiskRejection>,
+    pub signal_flow: SignalFlowSummary,
 }
 
 // ── BacktestEngine ────────────────────────────────────────────────────────────
@@ -142,8 +151,10 @@ impl BacktestEngine {
         }
 
         let mut signal_counter: u64 = 0;
-        let mut pending_entry: Option<(Signal, f64)> = None;
+        let mut pending_entry: Option<Signal> = None;
         let mut open_position: Option<OpenSimPosition> = None;
+        let mut risk_rejections: Vec<RiskRejection> = Vec::new();
+        let mut signal_flow = SignalFlowSummary::default();
 
         let strategy = ScreenedVwapScalp::default();
         let mut eng_1m = IndicatorEngine::new_default()?;
@@ -175,28 +186,101 @@ impl BacktestEngine {
 
             // ── A. Handle pending entry ───────────────────────────────────────
             // A signal from the previous candle is entered at THIS candle's open.
-            // After entry, fall through to the exit-check block (B) so that
-            // SL/TP can be triggered on the same candle the position was opened.
+            // Actual entry price is computed with adverse slippage at candle open.
+            // Risk is re-assessed at the actual price; invalid geometry or risk
+            // rejection are recorded as soft rejections (not fatal).
+            // After this block, fall through to B so exit checks run on the entry candle.
             let mut entered_this_bar = false;
-            if let Some((signal, qty)) = pending_entry.take() {
+            if let Some(signal) = pending_entry.take() {
                 if open_position.is_none() && equity > 0.0 {
-                    let entry = FillModel::simulate_entry(
-                        &signal,
-                        qty,
-                        &candle,
+                    let actual_price = FillModel::adverse_entry_price(
+                        signal.side,
+                        candle.open,
                         cost_cfg.slippage_bps,
-                        cost_cfg.taker_fee_bps,
                     );
-                    open_position = Some(OpenSimPosition {
-                        signal,
-                        qty,
-                        entry_time: entry.time,
-                        entry_price: entry.price,
-                        entry_fee: entry.fee,
-                        entry_slippage: entry.slippage,
-                        bars_held: 0,
-                    });
-                    entered_this_bar = true;
+                    let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price);
+
+                    if !adjusted.valid_geometry() {
+                        // Adverse slippage made the trade geometry invalid — soft reject.
+                        signal_flow.signals_rejected_actual_entry += 1;
+                        risk_rejections.push(build_rejection(
+                            &adjusted,
+                            candle.timestamp,
+                            equity,
+                            peak_equity,
+                            daily_realized_pnl,
+                            "actual_entry_invalid_geometry",
+                            adjusted.expected_reward_bps,
+                            adjusted.estimated_cost_bps,
+                            adjusted.expected_net_edge_bps,
+                        ));
+                    } else {
+                        let risk_ctx = RiskContext {
+                            equity,
+                            peak_equity,
+                            daily_realized_pnl,
+                            open_positions: 0,
+                        };
+                        match RiskEngine::assess(&risk_cfg, &cost_cfg, &risk_ctx, &adjusted) {
+                            Err(NorthflowError::InvalidSignal(_)) => {
+                                // Geometry looked valid but signal failed deeper validation —
+                                // treat as soft actual-entry rejection.
+                                signal_flow.signals_rejected_actual_entry += 1;
+                                risk_rejections.push(build_rejection(
+                                    &adjusted,
+                                    candle.timestamp,
+                                    equity,
+                                    peak_equity,
+                                    daily_realized_pnl,
+                                    "actual_entry_risk_error",
+                                    adjusted.expected_reward_bps,
+                                    adjusted.estimated_cost_bps,
+                                    adjusted.expected_net_edge_bps,
+                                ));
+                            }
+                            Err(e) => return Err(e),
+                            Ok(assessment) if !assessment.approved => {
+                                signal_flow.signals_rejected_actual_entry += 1;
+                                for reason in &assessment.failed {
+                                    risk_rejections.push(build_rejection(
+                                        &adjusted,
+                                        candle.timestamp,
+                                        equity,
+                                        peak_equity,
+                                        daily_realized_pnl,
+                                        reason,
+                                        adjusted.expected_reward_bps,
+                                        adjusted.estimated_cost_bps,
+                                        adjusted.expected_net_edge_bps,
+                                    ));
+                                }
+                            }
+                            Ok(assessment) => {
+                                if let Some(qty) = assessment.qty {
+                                    if qty > 0.0 {
+                                        let entry = FillModel::simulate_entry(
+                                            &adjusted,
+                                            qty,
+                                            &candle,
+                                            cost_cfg.slippage_bps,
+                                            cost_cfg.taker_fee_bps,
+                                        );
+                                        open_position = Some(OpenSimPosition {
+                                            signal: adjusted,
+                                            qty,
+                                            entry_time: entry.time,
+                                            entry_price: entry.price,
+                                            entry_fee: entry.fee,
+                                            entry_slippage: entry.slippage,
+                                            bars_held: 0,
+                                        });
+                                        signal_flow.trades_opened += 1;
+                                        entered_this_bar = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 // Do NOT continue — fall through to B so exit checks run on the
                 // entry candle.  Strategy evaluation (C) is skipped via the flag.
@@ -280,6 +364,7 @@ impl BacktestEngine {
                         Ok(None) => {}
                         Ok(Some(signal)) => {
                             signal_counter += 1;
+                            signal_flow.signals_generated += 1;
 
                             let risk_ctx = RiskContext {
                                 equity,
@@ -288,11 +373,28 @@ impl BacktestEngine {
                                 open_positions: 0,
                             };
 
-                            match try_assess_risk(&risk_cfg, &cost_cfg, &risk_ctx, signal)? {
-                                Some((sig, qty)) => {
-                                    pending_entry = Some((sig, qty));
+                            match RiskEngine::assess(&risk_cfg, &cost_cfg, &risk_ctx, &signal) {
+                                Err(e) => return Err(e),
+                                Ok(assessment) if !assessment.approved => {
+                                    signal_flow.signals_rejected_initial_risk += 1;
+                                    for reason in &assessment.failed {
+                                        risk_rejections.push(build_rejection(
+                                            &signal,
+                                            candle.timestamp,
+                                            equity,
+                                            peak_equity,
+                                            daily_realized_pnl,
+                                            reason,
+                                            signal.expected_reward_bps,
+                                            signal.estimated_cost_bps,
+                                            signal.expected_net_edge_bps,
+                                        ));
+                                    }
                                 }
-                                None => {}
+                                Ok(_) => {
+                                    signal_flow.signals_preapproved += 1;
+                                    pending_entry = Some(signal);
+                                }
                             }
                         }
                         Err(e) => return Err(e),
@@ -323,6 +425,9 @@ impl BacktestEngine {
             }
         }
 
+        // Finalise signal flow counters.
+        signal_flow.finalise(&risk_rejections, trades.len());
+
         println!(
             "  Backtest complete: {} trades, final equity {:.2}",
             trades.len(),
@@ -335,32 +440,9 @@ impl BacktestEngine {
             trades,
             equity_curve,
             summary,
+            risk_rejections,
+            signal_flow,
         }))
-    }
-}
-
-// ── Helper: assess risk and return pending entry or propagate error ────────────
-//
-// Ok(Some((signal, qty))) — approved, use for pending entry
-// Ok(None)                — rejected normally, skip signal
-// Err(e)                  — invalid input / config; stop the backtest
-fn try_assess_risk(
-    risk_cfg: &RiskConfig,
-    cost_cfg: &CostModelConfig,
-    risk_ctx: &RiskContext,
-    signal: Signal,
-) -> Result<Option<(Signal, f64)>, NorthflowError> {
-    match RiskEngine::assess(risk_cfg, cost_cfg, risk_ctx, &signal) {
-        Ok(assessment) if assessment.approved => {
-            if let Some(qty) = assessment.qty {
-                if qty > 0.0 {
-                    return Ok(Some((signal, qty)));
-                }
-            }
-            Ok(None)
-        }
-        Ok(_) => Ok(None),
-        Err(e) => Err(e),
     }
 }
 
@@ -461,6 +543,73 @@ fn build_trade(
         filters_failed: pos.signal.filters_failed.clone(),
         expected_edge_bps: pos.signal.expected_net_edge_bps,
         actual_edge_bps,
+    }
+}
+
+// ── Helper: adjust signal entry price to actual adverse fill price ─────────────
+//
+// Clones the signal and updates entry_price, expected_reward_bps, and
+// expected_net_edge_bps to reflect the real fill price at the next candle open.
+// All other fields (stop_loss, take_profit, side, signal_id, etc.) are unchanged.
+//
+// This adjusted signal is used for:
+//   1. valid_geometry() check — if slippage moves entry past SL or TP, reject.
+//   2. Re-risk assessment (position sizing at actual price).
+//   3. build_trade — reward_risk calculated from actual entry.
+
+fn adjusted_signal_for_actual_entry(signal: &Signal, actual_entry_price: f64) -> Signal {
+    let expected_reward_bps = if actual_entry_price > 0.0 {
+        match signal.side {
+            Side::Long => {
+                (signal.take_profit - actual_entry_price) / actual_entry_price * 10_000.0
+            }
+            Side::Short => {
+                (actual_entry_price - signal.take_profit) / actual_entry_price * 10_000.0
+            }
+        }
+    } else {
+        0.0
+    };
+    let expected_net_edge_bps = expected_reward_bps - signal.estimated_cost_bps;
+    Signal {
+        entry_price: actual_entry_price,
+        expected_reward_bps,
+        expected_net_edge_bps,
+        ..signal.clone()
+    }
+}
+
+// ── Helper: build a RiskRejection record ──────────────────────────────────────
+
+fn build_rejection(
+    signal: &Signal,
+    timestamp: i64,
+    equity: f64,
+    peak_equity: f64,
+    daily_realized_pnl: f64,
+    reason: &str,
+    expected_reward_bps: f64,
+    expected_cost_bps: f64,
+    expected_net_edge_bps: f64,
+) -> RiskRejection {
+    let drawdown_pct = if peak_equity > 0.0 && equity < peak_equity {
+        (peak_equity - equity) / peak_equity * 100.0
+    } else {
+        0.0
+    };
+    RiskRejection {
+        signal_id: signal.signal_id.as_str().to_string(),
+        timestamp,
+        side: signal.side.as_str().to_string(),
+        regime: signal.regime.clone(),
+        reason: reason.to_string(),
+        equity,
+        peak_equity,
+        drawdown_pct,
+        daily_realized_pnl,
+        expected_reward_bps,
+        expected_cost_bps,
+        expected_net_edge_bps,
     }
 }
 
@@ -922,8 +1071,8 @@ mod tests {
 
     // ── Risk error propagation ────────────────────────────────────────────────
 
-    /// Verifies that try_assess_risk propagates Err (invalid config/signal)
-    /// and does not silently swallow it.
+    /// Verifies that RiskEngine::assess returns Err for invalid config (not a
+    /// soft rejection), so the backtest engine propagates it as a fatal error.
     #[test]
     fn engine_propagates_risk_engine_error() {
         // Invalid risk config: risk_per_trade_pct = 0 → RiskEngine::assess returns Err
@@ -943,17 +1092,17 @@ mod tests {
             open_positions: 0,
         };
 
-        let result = try_assess_risk(&bad_risk_cfg, &cost_cfg, &risk_ctx, long_signal());
+        let result = RiskEngine::assess(&bad_risk_cfg, &cost_cfg, &risk_ctx, &long_signal());
         assert!(
             result.is_err(),
-            "try_assess_risk must propagate RiskEngine Err, got: {result:?}"
+            "RiskEngine::assess must return Err for invalid config, got: {result:?}"
         );
     }
 
-    /// Verifies that a normal risk rejection (approved=false) returns Ok(None),
-    /// not an Err.
+    /// Verifies that a normal risk rejection returns Ok with approved=false,
+    /// not an Err — so the engine records it and continues, not fatal.
     #[test]
-    fn engine_risk_rejection_returns_ok_none() {
+    fn engine_risk_rejection_returns_ok_approved_false() {
         // Context with too many open positions → rejected, not errored
         let risk_cfg = RiskConfig {
             risk_per_trade_pct: 1.0,
@@ -971,8 +1120,147 @@ mod tests {
             open_positions: 1, // >= max_open_positions(1) → rejected
         };
 
-        let result = try_assess_risk(&risk_cfg, &cost_cfg, &risk_ctx, long_signal());
+        let result = RiskEngine::assess(&risk_cfg, &cost_cfg, &risk_ctx, &long_signal());
         assert!(result.is_ok(), "risk rejection must be Ok, not Err");
-        assert!(result.unwrap().is_none(), "risk rejection must return None");
+        assert!(
+            !result.unwrap().approved,
+            "normal risk rejection must have approved=false"
+        );
+    }
+
+    // ── adjusted_signal_for_actual_entry helper ───────────────────────────────
+
+    #[test]
+    fn adjusted_signal_for_actual_entry_long_recalculates_expected_reward() {
+        let signal = long_signal(); // entry=30000, TP=30600, SL=29700
+        // Adverse price slightly higher than original entry
+        let actual_price = 30_006.0;
+        let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price);
+
+        assert_eq!(adjusted.entry_price, actual_price);
+        // expected_reward_bps = (30600 - 30006) / 30006 * 10000 ≈ 197.99
+        let expected = (30_600.0 - actual_price) / actual_price * 10_000.0;
+        assert!(
+            (adjusted.expected_reward_bps - expected).abs() < 1e-6,
+            "expected_reward_bps mismatch: got {}, expected {}",
+            adjusted.expected_reward_bps,
+            expected
+        );
+        // net edge = reward - cost
+        let expected_net = expected - signal.estimated_cost_bps;
+        assert!(
+            (adjusted.expected_net_edge_bps - expected_net).abs() < 1e-6,
+            "expected_net_edge_bps mismatch"
+        );
+        // Other fields unchanged
+        assert_eq!(adjusted.stop_loss, signal.stop_loss);
+        assert_eq!(adjusted.take_profit, signal.take_profit);
+        assert_eq!(adjusted.signal_id, signal.signal_id);
+    }
+
+    #[test]
+    fn adjusted_signal_for_actual_entry_short_recalculates_expected_reward() {
+        use crate::core::Timeframe;
+        let signal = Signal {
+            signal_id: SignalId::new("SIG-BT-00000002"),
+            symbol: Symbol::new("BTCUSDT").unwrap(),
+            strategy_id: StrategyId::new("screened_vwap_scalp"),
+            side: Side::Short,
+            entry_timeframe: Timeframe::OneMinute,
+            screening_timeframe: Timeframe::FifteenMinute,
+            confirmation_timeframe: Timeframe::FiveMinute,
+            entry_time: 1_700_000_000_000,
+            entry_price: 30_000.0,
+            stop_loss: 30_300.0,
+            take_profit: 29_400.0,
+            confidence: 75,
+            regime: "bearish".to_string(),
+            entry_reason: "ema_cross_down".to_string(),
+            filters_passed: vec![],
+            filters_failed: vec![],
+            expected_reward_bps: 200.0,
+            estimated_cost_bps: 8.0,
+            expected_net_edge_bps: 192.0,
+        };
+        // Adverse price slightly lower than original entry (short fills below open)
+        let actual_price = 29_994.0;
+        let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price);
+
+        assert_eq!(adjusted.entry_price, actual_price);
+        // expected_reward_bps = (29994 - 29400) / 29994 * 10000
+        let expected = (actual_price - 29_400.0) / actual_price * 10_000.0;
+        assert!(
+            (adjusted.expected_reward_bps - expected).abs() < 1e-6,
+            "expected_reward_bps mismatch: got {}, expected {}",
+            adjusted.expected_reward_bps,
+            expected
+        );
+    }
+
+    #[test]
+    fn actual_entry_invalid_long_geometry_is_rejected_not_fatal() {
+        // Long signal: TP=30600, SL=29700. If actual entry >= TP, geometry invalid.
+        let signal = long_signal(); // entry=30000, TP=30600, SL=29700
+        let actual_price = 30_600.0; // == TP → invalid geometry for long (need entry < TP)
+        let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price);
+        assert!(
+            !adjusted.valid_geometry(),
+            "entry == take_profit must be invalid geometry for long"
+        );
+    }
+
+    #[test]
+    fn actual_entry_invalid_long_geometry_above_tp_is_rejected_not_fatal() {
+        let signal = long_signal();
+        let actual_price = 30_700.0; // > TP → definitely invalid
+        let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price);
+        assert!(
+            !adjusted.valid_geometry(),
+            "entry > take_profit must be invalid geometry for long"
+        );
+    }
+
+    #[test]
+    fn actual_entry_valid_long_geometry_passes() {
+        let signal = long_signal(); // entry=30000, TP=30600, SL=29700
+        // Slippage of 2 bps on 30000 → 30006 < TP=30600 and > SL=29700 → valid
+        let actual_price = FillModel::adverse_entry_price(Side::Long, 30_000.0, 2.0);
+        let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price);
+        assert!(
+            adjusted.valid_geometry(),
+            "normal slippage must not invalidate geometry: actual_price={actual_price}"
+        );
+    }
+
+    // ── BacktestResult new fields ─────────────────────────────────────────────
+
+    #[test]
+    fn signal_flow_summary_present_in_backtest_result() {
+        let dir = "/tmp";
+        let sym = format!("nf_flow_{}", std::process::id());
+        let path = format!("{}/{}.csv", dir, sym);
+        write_test_csv(&path, 250, 1_700_000_000_000);
+
+        let mut cfg = default_cfg();
+        cfg.data_dir = dir.to_string();
+
+        let result = BacktestEngine::run(&cfg, &sym).expect("ok").expect("some");
+
+        // New fields must be present and internally consistent.
+        let flow = &result.signal_flow;
+        assert_eq!(flow.trades_closed, result.trades.len(),
+            "signal_flow.trades_closed must equal trades.len()");
+        assert_eq!(flow.risk_rejections, result.risk_rejections.len(),
+            "signal_flow.risk_rejections must equal risk_rejections.len()");
+        assert!(
+            flow.signals_preapproved >= flow.trades_opened,
+            "trades_opened must not exceed preapproved signals"
+        );
+        assert!(
+            flow.signals_generated >= flow.signals_preapproved + flow.signals_rejected_initial_risk,
+            "generated must be >= preapproved + initial_rejected"
+        );
+
+        std::fs::remove_file(&path).ok();
     }
 }

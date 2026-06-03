@@ -49,6 +49,23 @@ pub struct OpenSimPosition {
 pub struct FillModel;
 
 impl FillModel {
+    /// Compute the adverse entry price from a raw open price.
+    ///
+    /// Long  → buy above open (adverse: pay more).
+    /// Short → sell below open (adverse: receive less).
+    ///
+    /// Deterministic: identical formula used internally by `simulate_entry`.
+    /// Use this to compute the actual entry price before re-risking, so that
+    /// position sizing reflects the real fill price rather than the signal-time
+    /// close price.
+    pub fn adverse_entry_price(side: Side, open_price: f64, slippage_bps: f64) -> f64 {
+        let factor = slippage_bps / 10_000.0;
+        match side {
+            Side::Long => open_price * (1.0 + factor),
+            Side::Short => open_price * (1.0 - factor),
+        }
+    }
+
     /// Simulate entry at `entry_candle.open` with adverse slippage.
     ///
     /// Long  → buy at a price ABOVE open (adverse: pay more).
@@ -61,11 +78,7 @@ impl FillModel {
         taker_fee_bps: f64,
     ) -> EntryFill {
         let raw = entry_candle.open;
-        let factor = slippage_bps / 10_000.0;
-        let price = match signal.side {
-            Side::Long => raw * (1.0 + factor),
-            Side::Short => raw * (1.0 - factor),
-        };
+        let price = Self::adverse_entry_price(signal.side, raw, slippage_bps);
         let fee = price * qty * taker_fee_bps / 10_000.0;
         let slippage = (price - raw).abs() * qty;
         EntryFill {
@@ -197,6 +210,77 @@ mod tests {
             close,
             volume: 1000.0,
         }
+    }
+
+    #[test]
+    fn adverse_entry_price_long_is_above_open() {
+        let open = 30_000.0;
+        let slippage_bps = 2.0;
+        let price = FillModel::adverse_entry_price(Side::Long, open, slippage_bps);
+        assert!(
+            price > open,
+            "long adverse price must be above open: {price} <= {open}"
+        );
+        let expected = open * (1.0 + slippage_bps / 10_000.0);
+        assert!(
+            (price - expected).abs() < 1e-9,
+            "long price mismatch: {price} != {expected}"
+        );
+    }
+
+    #[test]
+    fn adverse_entry_price_short_is_below_open() {
+        let open = 30_000.0;
+        let slippage_bps = 2.0;
+        let price = FillModel::adverse_entry_price(Side::Short, open, slippage_bps);
+        assert!(
+            price < open,
+            "short adverse price must be below open: {price} >= {open}"
+        );
+        let expected = open * (1.0 - slippage_bps / 10_000.0);
+        assert!(
+            (price - expected).abs() < 1e-9,
+            "short price mismatch: {price} != {expected}"
+        );
+    }
+
+    #[test]
+    fn adverse_entry_price_matches_simulate_entry_long() {
+        let signal = long_signal();
+        let candle = make_candle(1_700_000_060_000, 30_050.0, 30_100.0, 30_000.0, 30_080.0);
+        let slippage_bps = 2.0;
+        let fee_bps = 4.0;
+
+        let adverse = FillModel::adverse_entry_price(Side::Long, candle.open, slippage_bps);
+        let fill = FillModel::simulate_entry(&signal, 0.1, &candle, slippage_bps, fee_bps);
+
+        assert!(
+            (fill.price - adverse).abs() < 1e-9,
+            "simulate_entry price must match adverse_entry_price: fill={}, adverse={}",
+            fill.price,
+            adverse
+        );
+    }
+
+    #[test]
+    fn adverse_entry_price_matches_simulate_entry_short() {
+        let mut signal = long_signal();
+        signal.side = Side::Short;
+        signal.stop_loss = 30_300.0;
+        signal.take_profit = 29_400.0;
+        let candle = make_candle(1_700_000_060_000, 29_950.0, 30_000.0, 29_900.0, 29_970.0);
+        let slippage_bps = 2.0;
+        let fee_bps = 4.0;
+
+        let adverse = FillModel::adverse_entry_price(Side::Short, candle.open, slippage_bps);
+        let fill = FillModel::simulate_entry(&signal, 0.1, &candle, slippage_bps, fee_bps);
+
+        assert!(
+            (fill.price - adverse).abs() < 1e-9,
+            "simulate_entry price must match adverse_entry_price: fill={}, adverse={}",
+            fill.price,
+            adverse
+        );
     }
 
     fn long_signal() -> Signal {

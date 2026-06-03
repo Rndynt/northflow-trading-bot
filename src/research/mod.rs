@@ -4,6 +4,8 @@
 //!   reports/backtest_summary.json
 //!   reports/trades.csv
 //!   reports/equity_curve.csv
+//!   reports/risk_rejections.csv
+//!   reports/signal_flow_summary.json
 //!   reports/attribution_summary.json
 //!   reports/attribution_by_regime.csv
 //!   reports/attribution_by_exit_reason.csv
@@ -136,18 +138,41 @@ fn run_symbol(cfg: &ResearchConfig, symbol: &str) {
             println!("    Max consecutive losses: {}", s.max_consecutive_losses);
             println!();
 
+            // ── Signal flow summary ───────────────────────────────────────────
+            let flow = &result.signal_flow;
+            println!("  Signal flow:");
+            println!("    signals generated:          {}", flow.signals_generated);
+            println!("    signals preapproved:        {}", flow.signals_preapproved);
+            println!("    rejected initial risk:      {}", flow.signals_rejected_initial_risk);
+            println!("    rejected actual entry:      {}", flow.signals_rejected_actual_entry);
+            println!("    trades opened:              {}", flow.trades_opened);
+            println!("    trades closed:              {}", flow.trades_closed);
+            println!("    risk rejection rows:        {}", flow.risk_rejections);
+            if flow.risk_rejections > 0 {
+                println!("      max_drawdown:             {}", flow.rejections_max_drawdown);
+                println!("      daily_loss:               {}", flow.rejections_daily_loss);
+                println!("      reward_risk:              {}", flow.rejections_reward_risk);
+                println!("      expected_net_edge:        {}", flow.rejections_expected_net_edge);
+                println!("      other:                    {}", flow.rejections_other);
+            }
+            println!();
+
             // ── Phase 6: base report files ────────────────────────────────────
             match ReportWriter::write_all(
                 &cfg.reports_dir,
                 &result.summary,
                 &result.trades,
                 &result.equity_curve,
+                &result.risk_rejections,
+                &result.signal_flow,
             ) {
                 Ok(()) => {
                     println!("  Base reports written:");
                     println!("    {}/backtest_summary.json", cfg.reports_dir);
                     println!("    {}/trades.csv", cfg.reports_dir);
                     println!("    {}/equity_curve.csv", cfg.reports_dir);
+                    println!("    {}/risk_rejections.csv", cfg.reports_dir);
+                    println!("    {}/signal_flow_summary.json", cfg.reports_dir);
                 }
                 Err(e) => {
                     println!("  Warning: could not write base reports: {e}");
@@ -164,6 +189,7 @@ fn run_symbol(cfg: &ResearchConfig, symbol: &str) {
                 &result.trades,
                 &result.equity_curve,
                 &attribution,
+                result.risk_rejections.len(),
             );
 
             // Audit summary — print before writing so the user sees results

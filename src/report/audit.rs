@@ -304,8 +304,11 @@ impl ReportAuditor {
                     ctx_sid.clone(),
                 ));
             }
+            // Empty filters_failed means all filters were passed — normal for
+            // high-quality signals.  Downgraded from Warning to Info so that
+            // strategies that pass all filters do not inflate warning counts.
             if t.filters_failed.is_empty() {
-                issues.push(Self::warn(
+                issues.push(Self::info(
                     "empty_filters_failed",
                     "filters_failed is empty (all filters passed)",
                     ctx_tid.clone(),
@@ -381,6 +384,21 @@ impl ReportAuditor {
     ) -> AuditIssue {
         AuditIssue {
             severity: AuditSeverity::Warning,
+            code: code.to_string(),
+            message: msg.to_string(),
+            trade_id,
+            signal_id,
+        }
+    }
+
+    fn info(
+        code: &str,
+        msg: &str,
+        trade_id: Option<String>,
+        signal_id: Option<String>,
+    ) -> AuditIssue {
+        AuditIssue {
+            severity: AuditSeverity::Info,
             code: code.to_string(),
             message: msg.to_string(),
             trade_id,
@@ -589,13 +607,27 @@ mod tests {
         assert!(has_warning(&r, "empty_filters_passed"));
     }
 
+    fn has_info(report: &AuditReport, code: &str) -> bool {
+        report
+            .issues
+            .iter()
+            .any(|i| i.severity == AuditSeverity::Info && i.code == code)
+    }
+
     #[test]
-    fn audit_warns_empty_filters_failed() {
+    fn audit_does_not_warn_when_filters_failed_empty() {
         let mut t = valid_trade();
         t.filters_failed = vec![];
         let r = ReportAuditor::audit_trades(&[t]);
-        assert!(r.passed, "empty filters_failed is a warning only");
-        assert!(has_warning(&r, "empty_filters_failed"));
+        assert!(r.passed, "empty filters_failed must not fail the audit");
+        assert!(
+            !has_warning(&r, "empty_filters_failed"),
+            "empty filters_failed must not produce a warning (downgraded to Info)"
+        );
+        assert!(
+            has_info(&r, "empty_filters_failed"),
+            "empty filters_failed should produce an Info issue"
+        );
     }
 
     #[test]

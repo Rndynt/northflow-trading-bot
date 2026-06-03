@@ -260,7 +260,7 @@ mod tests {
         let trades = vec![valid_trade(1)];
         let attr = AttributionEngine::build(&trades);
         let audit = ReportAuditor::audit_trades(&trades);
-        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr);
+        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr, 0);
         AttributionWriter::write_all(&dir, &attr, &audit, &manifest).unwrap();
 
         let content = std::fs::read_to_string(format!("{dir}/attribution_summary.json")).unwrap();
@@ -275,7 +275,7 @@ mod tests {
         let trades = vec![valid_trade(1)];
         let attr = AttributionEngine::build(&trades);
         let audit = ReportAuditor::audit_trades(&trades);
-        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr);
+        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr, 0);
         AttributionWriter::write_all(&dir, &attr, &audit, &manifest).unwrap();
 
         let content = std::fs::read_to_string(format!("{dir}/attribution_by_regime.csv")).unwrap();
@@ -290,7 +290,7 @@ mod tests {
         let trades = vec![valid_trade(1)];
         let attr = AttributionEngine::build(&trades);
         let audit = ReportAuditor::audit_trades(&trades);
-        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr);
+        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr, 0);
         AttributionWriter::write_all(&dir, &attr, &audit, &manifest).unwrap();
 
         let content =
@@ -305,7 +305,7 @@ mod tests {
         let trades = vec![valid_trade(1)];
         let attr = AttributionEngine::build(&trades);
         let audit = ReportAuditor::audit_trades(&trades);
-        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr);
+        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr, 0);
         AttributionWriter::write_all(&dir, &attr, &audit, &manifest).unwrap();
 
         let content = std::fs::read_to_string(format!("{dir}/attribution_by_side.csv")).unwrap();
@@ -319,7 +319,7 @@ mod tests {
         let trades = vec![valid_trade(1)];
         let attr = AttributionEngine::build(&trades);
         let audit = ReportAuditor::audit_trades(&trades);
-        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr);
+        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr, 0);
         AttributionWriter::write_all(&dir, &attr, &audit, &manifest).unwrap();
 
         let content = std::fs::read_to_string(format!("{dir}/attribution_by_filter.csv")).unwrap();
@@ -334,7 +334,7 @@ mod tests {
         let trades = vec![valid_trade(1)];
         let attr = AttributionEngine::build(&trades);
         let audit = ReportAuditor::audit_trades(&trades);
-        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr);
+        let manifest = ManifestWriter::build(&dir, &trades, &[], &attr, 0);
         AttributionWriter::write_all(&dir, &attr, &audit, &manifest).unwrap();
 
         let content = std::fs::read_to_string(format!("{dir}/audit_report.json")).unwrap();
@@ -351,7 +351,7 @@ mod tests {
         let equity: Vec<EquityPoint> = vec![];
         let attr = AttributionEngine::build(&trades);
         let audit = ReportAuditor::audit_trades(&trades);
-        let manifest = ManifestWriter::build(&dir, &trades, &equity, &attr);
+        let manifest = ManifestWriter::build(&dir, &trades, &equity, &attr, 0);
         AttributionWriter::write_all(&dir, &attr, &audit, &manifest).unwrap();
 
         let content = std::fs::read_to_string(format!("{dir}/report_manifest.json")).unwrap();
@@ -380,7 +380,7 @@ mod tests {
         let dir = tmp_dir("empty");
         let attr = AttributionEngine::build(&[]);
         let audit = ReportAuditor::audit_trades(&[]);
-        let manifest = ManifestWriter::build(&dir, &[], &[], &attr);
+        let manifest = ManifestWriter::build(&dir, &[], &[], &attr, 0);
         AttributionWriter::write_all(&dir, &attr, &audit, &manifest).unwrap();
 
         for filename in &[

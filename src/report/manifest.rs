@@ -48,6 +48,7 @@ impl ManifestWriter {
         trades: &[Trade],
         equity_curve: &[EquityPoint],
         attribution: &AttributionReport,
+        risk_rejections_count: usize,
     ) -> ReportManifest {
         let dir = manifest_display_dir(reports_dir);
 
@@ -84,6 +85,14 @@ impl ManifestWriter {
             ("equity_curve", equity_curve.len()),
         );
         entries.insert(format!("{dir}/report_manifest.json"), ("manifest", 1));
+        entries.insert(
+            format!("{dir}/risk_rejections.csv"),
+            ("risk_rejections", risk_rejections_count),
+        );
+        entries.insert(
+            format!("{dir}/signal_flow_summary.json"),
+            ("signal_flow_summary", 1),
+        );
         entries.insert(format!("{dir}/trades.csv"), ("trades", trades.len()));
 
         let files = entries
@@ -190,6 +199,7 @@ mod tests {
             &[],
             &empty_equity(),
             &AttributionEngine::build(&[]),
+            0,
         )
     }
 
@@ -209,6 +219,8 @@ mod tests {
             "reports/attribution_by_filter.csv",
             "reports/audit_report.json",
             "reports/report_manifest.json",
+            "reports/risk_rejections.csv",
+            "reports/signal_flow_summary.json",
         ] {
             assert!(
                 paths.contains(required),

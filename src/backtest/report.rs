@@ -7,6 +7,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::backtest::metrics::{BacktestSummary, EquityPoint};
+use crate::backtest::risk_trace::{RiskRejection, SignalFlowSummary};
 use crate::core::{NorthflowError, Trade};
 
 // ── ReportWriter ──────────────────────────────────────────────────────────────
@@ -19,6 +20,8 @@ impl ReportWriter {
         summary: &BacktestSummary,
         trades: &[Trade],
         equity_curve: &[EquityPoint],
+        risk_rejections: &[RiskRejection],
+        signal_flow: &SignalFlowSummary,
     ) -> Result<(), NorthflowError> {
         let dir = Path::new(reports_dir);
         fs::create_dir_all(dir).map_err(|e| {
@@ -28,6 +31,8 @@ impl ReportWriter {
         Self::write_summary_json(dir, summary)?;
         Self::write_trades_csv(dir, trades)?;
         Self::write_equity_csv(dir, equity_curve)?;
+        Self::write_risk_rejections_csv(dir, risk_rejections)?;
+        Self::write_signal_flow_summary_json(dir, signal_flow)?;
 
         Ok(())
     }
@@ -149,6 +154,81 @@ impl ReportWriter {
         fs::write(&path, content)
             .map_err(|e| NorthflowError::DataError(format!("cannot write {}: {e}", path.display())))
     }
+
+    // ── Risk Rejections CSV ───────────────────────────────────────────────────
+
+    fn write_risk_rejections_csv(
+        dir: &Path,
+        rejections: &[RiskRejection],
+    ) -> Result<(), NorthflowError> {
+        let path = dir.join("risk_rejections.csv");
+        let mut rows: Vec<String> = Vec::with_capacity(rejections.len() + 1);
+        rows.push(
+            "signal_id,timestamp,side,regime,reason,equity,peak_equity,\
+             drawdown_pct,daily_realized_pnl,expected_reward_bps,\
+             expected_cost_bps,expected_net_edge_bps"
+                .to_string(),
+        );
+        for r in rejections {
+            rows.push(format!(
+                "{},{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}",
+                csv_escape(&r.signal_id),
+                r.timestamp,
+                csv_escape(&r.side),
+                csv_escape(&r.regime),
+                csv_escape(&r.reason),
+                r.equity,
+                r.peak_equity,
+                r.drawdown_pct,
+                r.daily_realized_pnl,
+                r.expected_reward_bps,
+                r.expected_cost_bps,
+                r.expected_net_edge_bps,
+            ));
+        }
+        let content = rows.join("\n") + "\n";
+        fs::write(&path, content)
+            .map_err(|e| NorthflowError::DataError(format!("cannot write {}: {e}", path.display())))
+    }
+
+    // ── Signal Flow Summary JSON ──────────────────────────────────────────────
+
+    fn write_signal_flow_summary_json(
+        dir: &Path,
+        flow: &SignalFlowSummary,
+    ) -> Result<(), NorthflowError> {
+        let path = dir.join("signal_flow_summary.json");
+        let json = format!(
+            "{{\n\
+              \"signals_generated\": {},\n\
+              \"signals_preapproved\": {},\n\
+              \"signals_rejected_initial_risk\": {},\n\
+              \"signals_rejected_actual_entry\": {},\n\
+              \"trades_opened\": {},\n\
+              \"trades_closed\": {},\n\
+              \"risk_rejections\": {},\n\
+              \"rejections_max_drawdown\": {},\n\
+              \"rejections_daily_loss\": {},\n\
+              \"rejections_reward_risk\": {},\n\
+              \"rejections_expected_net_edge\": {},\n\
+              \"rejections_other\": {}\n\
+            }}",
+            flow.signals_generated,
+            flow.signals_preapproved,
+            flow.signals_rejected_initial_risk,
+            flow.signals_rejected_actual_entry,
+            flow.trades_opened,
+            flow.trades_closed,
+            flow.risk_rejections,
+            flow.rejections_max_drawdown,
+            flow.rejections_daily_loss,
+            flow.rejections_reward_risk,
+            flow.rejections_expected_net_edge,
+            flow.rejections_other,
+        );
+        fs::write(&path, json)
+            .map_err(|e| NorthflowError::DataError(format!("cannot write {}: {e}", path.display())))
+    }
 }
 
 // ── CSV helpers ───────────────────────────────────────────────────────────────
@@ -170,6 +250,7 @@ fn csv_escape(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::backtest::metrics::{BacktestSummary, EquityPoint};
+    use crate::backtest::risk_trace::{RiskRejection, SignalFlowSummary};
     use crate::core::{
         PositionId, Side, SignalId, StrategyId, Symbol, Trade, TradeExitReason, TradeId,
     };
@@ -238,6 +319,23 @@ mod tests {
         ]
     }
 
+    fn test_rejection() -> RiskRejection {
+        RiskRejection {
+            signal_id: "SIG-BT-00000001".to_string(),
+            timestamp: 1_700_000_000_000,
+            side: "long".to_string(),
+            regime: "bullish".to_string(),
+            reason: "max_drawdown_reached".to_string(),
+            equity: 9_500.0,
+            peak_equity: 10_000.0,
+            drawdown_pct: 5.0,
+            daily_realized_pnl: -200.0,
+            expected_reward_bps: 200.0,
+            expected_cost_bps: 8.0,
+            expected_net_edge_bps: 192.0,
+        }
+    }
+
     fn temp_dir(tag: &str) -> String {
         let path = format!("/tmp/northflow_rpt_{}_{}", std::process::id(), tag);
         std::fs::create_dir_all(&path).unwrap();
@@ -247,7 +345,15 @@ mod tests {
     #[test]
     fn writes_summary_json() {
         let dir = temp_dir("json");
-        ReportWriter::write_all(&dir, &test_summary(), &[], &[]).unwrap();
+        ReportWriter::write_all(
+            &dir,
+            &test_summary(),
+            &[],
+            &[],
+            &[],
+            &SignalFlowSummary::default(),
+        )
+        .unwrap();
         let content = std::fs::read_to_string(format!("{dir}/backtest_summary.json")).unwrap();
         assert!(
             content.contains("\"total_trades\""),
@@ -261,7 +367,15 @@ mod tests {
     #[test]
     fn writes_trades_csv() {
         let dir = temp_dir("trades");
-        ReportWriter::write_all(&dir, &test_summary(), &[test_trade()], &[]).unwrap();
+        ReportWriter::write_all(
+            &dir,
+            &test_summary(),
+            &[test_trade()],
+            &[],
+            &[],
+            &SignalFlowSummary::default(),
+        )
+        .unwrap();
         let content = std::fs::read_to_string(format!("{dir}/trades.csv")).unwrap();
         assert!(content.contains("TRD-SIG-BT-00000001"), "trade_id missing");
         assert!(content.contains("BTCUSDT"), "symbol missing");
@@ -271,7 +385,15 @@ mod tests {
     #[test]
     fn writes_equity_curve_csv() {
         let dir = temp_dir("equity");
-        ReportWriter::write_all(&dir, &test_summary(), &[], &test_equity()).unwrap();
+        ReportWriter::write_all(
+            &dir,
+            &test_summary(),
+            &[],
+            &test_equity(),
+            &[],
+            &SignalFlowSummary::default(),
+        )
+        .unwrap();
         let content = std::fs::read_to_string(format!("{dir}/equity_curve.csv")).unwrap();
         assert!(
             content.contains("timestamp,equity,drawdown_pct"),
@@ -284,7 +406,15 @@ mod tests {
     #[test]
     fn trades_csv_header_contains_required_fields() {
         let dir = temp_dir("header");
-        ReportWriter::write_all(&dir, &test_summary(), &[], &[]).unwrap();
+        ReportWriter::write_all(
+            &dir,
+            &test_summary(),
+            &[],
+            &[],
+            &[],
+            &SignalFlowSummary::default(),
+        )
+        .unwrap();
         let content = std::fs::read_to_string(format!("{dir}/trades.csv")).unwrap();
         let header = content.lines().next().unwrap_or("");
         for field in &[
@@ -319,6 +449,120 @@ mod tests {
                 "header missing field '{field}': {header}"
             );
         }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn writes_risk_rejections_csv_with_header() {
+        let dir = temp_dir("rrejections");
+        ReportWriter::write_all(
+            &dir,
+            &test_summary(),
+            &[],
+            &[],
+            &[test_rejection()],
+            &SignalFlowSummary::default(),
+        )
+        .unwrap();
+        let content =
+            std::fs::read_to_string(format!("{dir}/risk_rejections.csv")).unwrap();
+        assert!(
+            content.contains("signal_id,timestamp,side,regime,reason"),
+            "header missing: {content}"
+        );
+        assert!(content.contains("SIG-BT-00000001"), "signal_id missing");
+        assert!(content.contains("max_drawdown_reached"), "reason missing");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn writes_empty_risk_rejections_csv_with_header() {
+        let dir = temp_dir("rrejections_empty");
+        ReportWriter::write_all(
+            &dir,
+            &test_summary(),
+            &[],
+            &[],
+            &[],
+            &SignalFlowSummary::default(),
+        )
+        .unwrap();
+        let content =
+            std::fs::read_to_string(format!("{dir}/risk_rejections.csv")).unwrap();
+        assert!(
+            content.contains("signal_id,timestamp,side,regime,reason"),
+            "header missing for empty file: {content}"
+        );
+        // Only header, no data rows
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 1, "empty rejections should produce only header");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn writes_signal_flow_summary_json() {
+        let dir = temp_dir("sigflow");
+        let mut flow = SignalFlowSummary::default();
+        flow.signals_generated = 10;
+        flow.signals_preapproved = 8;
+        flow.signals_rejected_initial_risk = 2;
+        flow.trades_opened = 7;
+        flow.trades_closed = 7;
+        flow.risk_rejections = 3;
+        flow.rejections_max_drawdown = 1;
+        flow.rejections_daily_loss = 1;
+        flow.rejections_other = 1;
+
+        ReportWriter::write_all(
+            &dir,
+            &test_summary(),
+            &[],
+            &[],
+            &[],
+            &flow,
+        )
+        .unwrap();
+        let content =
+            std::fs::read_to_string(format!("{dir}/signal_flow_summary.json")).unwrap();
+        assert!(content.contains("\"signals_generated\": 10"), "missing signals_generated");
+        assert!(content.contains("\"signals_preapproved\": 8"), "missing signals_preapproved");
+        assert!(content.contains("\"trades_opened\": 7"), "missing trades_opened");
+        assert!(content.contains("\"risk_rejections\": 3"), "missing risk_rejections");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn risk_rejections_csv_escapes_fields_with_commas() {
+        let dir = temp_dir("rrejections_escape");
+        let r = RiskRejection {
+            signal_id: "SIG-BT-00000001".to_string(),
+            timestamp: 1_700_000_000_000,
+            side: "long".to_string(),
+            regime: "bull,ish".to_string(), // contains comma — must be escaped
+            reason: "max_drawdown_reached".to_string(),
+            equity: 9_500.0,
+            peak_equity: 10_000.0,
+            drawdown_pct: 5.0,
+            daily_realized_pnl: -100.0,
+            expected_reward_bps: 200.0,
+            expected_cost_bps: 8.0,
+            expected_net_edge_bps: 192.0,
+        };
+        ReportWriter::write_all(
+            &dir,
+            &test_summary(),
+            &[],
+            &[],
+            &[r],
+            &SignalFlowSummary::default(),
+        )
+        .unwrap();
+        let content =
+            std::fs::read_to_string(format!("{dir}/risk_rejections.csv")).unwrap();
+        assert!(
+            content.contains("\"bull,ish\""),
+            "comma in regime must be CSV-escaped: {content}"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
