@@ -158,3 +158,195 @@ The first active strategy is `screened_vwap_scalp`.
 ### screened_vwap_scalp rules
 
 **Regime classification (15m / 5m):**
+- Bullish: EMA 50 > EMA 200 AND close > EMA 50
+- Bearish: EMA 50 < EMA 200 AND close < EMA 50
+- Neutral / Unknown: otherwise
+
+**Signal direction:**
+- Long: screening Bullish + confirmation Bullish or Neutral
+- Short: screening Bearish + confirmation Bearish or Neutral
+
+**Geometry:**
+- Long: entry = close, SL = close − ATR, TP = close + ATR × 1.5
+- Short: entry = close, SL = close + ATR, TP = close − ATR × 1.5
+
+---
+
+## Phase 3 — Indicators
+
+| Indicator | Period | Notes |
+|---|---|---|
+| EMA | 8, 21, 50, 200 | First price initialises directly; alpha = 2/(period+1) |
+| ATR | 14 | Wilder smoothing; initial value = mean of first 14 TRs |
+| VWAP | — | Session-cumulative; typical = (H+L+C)/3; zero-volume safe |
+| Volume SMA | 20 | Rolling window; `VecDeque` with O(1) update |
+
+---
+
+## Key rules
+
+### Signal ID is mandatory
+
+```
+signal_id → order_id → fill_id → position_id → exit_order_id → trade_id
+```
+
+Deterministic format: `SIG-BT-00000001`, `SIG-BT-00000002`, …  
+No random IDs. No UUID dependency. No system time.
+
+### Timeframe roles are explicit
+
+```toml
+entry_timeframe        = "1m"   # entry and execution signals
+screening_timeframe    = "15m"  # market regime / bias filter
+confirmation_timeframe = "5m"   # intermediate confirmation layer
+```
+
+### CSV source must be 1m OHLCV
+
+```
+5m and 15m candles are built from 1m — not loaded from separate files.
+```
+
+Required CSV columns:
+
+```
+timestamp,open,high,low,close,volume
+```
+
+Or alternatively `open_time` instead of `timestamp` (case-insensitive).
+
+### Strict timestamp rules
+
+- Decimal, NaN, inf, negative, zero timestamps are **rejected**.
+- Values `< 10^12` are treated as Unix seconds → multiplied by 1000.
+- Values `>= 10^12` are kept as milliseconds unchanged.
+
+### Timeframe buckets require exact candle counts
+
+- A 5m bucket requires **exactly 5** one-minute candles — no more, no less.
+- A 15m bucket requires **exactly 15** one-minute candles — no more, no less.
+- Underfilled and overfilled buckets are dropped silently.
+
+### Paper and live modes are disabled
+
+```
+northflow paper   # exits with error
+northflow live    # exits with error
+```
+
+---
+
+## Design principles
+
+- Research and validation before any live or paper trading
+- Zero external dependencies — pure Rust `std` only
+- Deterministic: same config + same data = same result, always
+- Truthful data: bad data is reported, never hidden or silently filled
+- `signal_id` mandatory on every signal for full attribution chain
+- Every trade auditable: errors = broken attribution, warnings = incomplete explainability
+
+---
+
+## Project structure
+
+```
+northflow-crypto-trading-bot/
+├── src/
+│   ├── lib.rs              — public module exports
+│   ├── main.rs             — CLI entry point
+│   ├── core/               — Phase 1: core trading domain types
+│   ├── market/             — Phase 2: OHLCV data foundation
+│   ├── indicators/         — Phase 3: deterministic streaming indicators
+│   ├── strategy/           — Phase 4: deterministic strategy engine
+│   ├── config/             — ResearchConfig (parsed from TOML, no serde)
+│   ├── risk/               — Phase 5: position sizing + cost model + risk guards
+│   ├── backtest/           — Phase 6: deterministic replay engine + fill model + reports
+│   ├── report/             — Phase 7: attribution, audit, manifest, validation
+│   │   ├── attribution.rs  — AttributionEngine (groups by regime/side/exit/filter)
+│   │   ├── audit.rs        — ReportAuditor (validates every trade field + traceability)
+│   │   ├── manifest.rs     — ManifestWriter (deterministic file manifest, no system time)
+│   │   └── validation.rs   — TradeValidator (composable field-level checks)
+│   ├── research/           — Research CLI orchestrator
+│   ├── execution/          — placeholder (not active)
+│   ├── journal/            — placeholder (not active)
+│   └── advisor/            — placeholder (not active)
+├── config/
+│   └── research.toml       — default research config
+├── data/
+│   └── historical/         — place 1m OHLCV CSV files here: <SYMBOL>.csv
+└── reports/                — all report output files
+```
+
+---
+
+## Quick start
+
+```bash
+# Build
+cargo build --release
+
+# Run backtest (needs data/historical/BTCUSDT.csv)
+cargo run -- research --config config/research.toml
+
+# Run all unit tests
+cargo test
+
+# Print help
+cargo run -- help
+```
+
+---
+
+## CSV data format
+
+```
+timestamp,open,high,low,close,volume
+1704067200000,42150.0,42800.0,41900.0,42600.0,1234.5
+1704067260000,42600.0,42900.0,42550.0,42750.0,987.2
+```
+
+- Header: `timestamp` or `open_time` (case-insensitive)
+- Timestamps: Unix epoch in seconds or milliseconds (normalised to ms)
+
+---
+
+## Config reference (`config/research.toml`)
+
+| Key | Section | Description |
+|-----|---------|-------------|
+| `symbols` | `[pairs]` | List of symbols, e.g. `["BTCUSDT"]` |
+| `entry_timeframe` | `[pairs]` | Must be `"1m"` |
+| `screening_timeframe` | `[pairs]` | Must be `"15m"` |
+| `confirmation_timeframe` | `[pairs]` | Must be `"5m"` |
+| `data_dir` | `[backtest]` | Directory containing CSV files |
+| `reports_dir` | `[backtest]` | Output directory for reports |
+| `initial_equity_usd` | `[risk]` | Starting capital |
+| `risk_per_trade_pct` | `[risk]` | % of equity risked per trade |
+| `max_open_positions` | `[risk]` | Max simultaneous positions |
+| `max_leverage` | `[risk]` | Max notional leverage |
+| `min_reward_risk` | `[risk]` | Minimum R:R ratio |
+| `max_daily_loss_pct` | `[risk]` | Daily loss circuit breaker |
+| `max_drawdown_pct` | `[risk]` | Total drawdown circuit breaker |
+| `taker_fee_bps` | `[cost]` | Taker fee in basis points |
+| `slippage_bps` | `[cost]` | Slippage estimate in bps |
+| `spread_bps` | `[cost]` | Spread cost in bps |
+| `market_impact_bps` | `[cost]` | Market impact estimate in bps |
+| `conservative_intrabar` | `[backtest]` | Worst-case intrabar fill |
+| `min_confidence` | `[strategy]` | Minimum signal confidence (0–100) |
+
+---
+
+## Strictly forbidden (current phase and beyond)
+
+- React app, TypeScript app, dashboard, web UI
+- Telegram integration
+- LLM trading decision or AI-decided entries/SL/TP/sizing
+- Manager agent, learning agent, survival agent, orchestrator
+- Live exchange order placement
+- Paper trading loop (until research validated)
+- Multi-strategy router, portfolio optimizer
+- 100x leverage logic
+- Fake trades, fake backtest reports
+- Synthetic candles, interpolated candles, optimistic data fill
+- Exchange API, websocket feed, database requirement
