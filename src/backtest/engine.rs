@@ -28,7 +28,7 @@
 use std::path::Path;
 
 use crate::backtest::fill_model::{FillModel, OpenSimPosition};
-use crate::backtest::geometry::{adjusted_signal_for_actual_entry, EntryGeometryMode};
+use crate::backtest::geometry::{EntryGeometryMode, adjusted_signal_for_actual_entry};
 use crate::backtest::metrics::{BacktestSummary, EquityPoint, Metrics};
 use crate::backtest::risk_trace::{RiskRejection, SignalFlowSummary};
 use crate::config::ResearchConfig;
@@ -202,7 +202,11 @@ impl BacktestEngine {
                         candle.open,
                         cost_cfg.slippage_bps,
                     );
-                    let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price, bt_cfg.entry_geometry_mode);
+                    let adjusted = adjusted_signal_for_actual_entry(
+                        &signal,
+                        actual_price,
+                        bt_cfg.entry_geometry_mode,
+                    );
 
                     if !adjusted.valid_geometry() {
                         // Adverse slippage made the trade geometry invalid — soft reject.
@@ -1120,7 +1124,11 @@ mod tests {
         let signal = long_signal(); // entry=30000, TP=30600, SL=29700
         // Adverse price slightly higher than original entry
         let actual_price = 30_006.0;
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price, EntryGeometryMode::PreserveSignalLevels);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual_price,
+            EntryGeometryMode::PreserveSignalLevels,
+        );
 
         assert_eq!(adjusted.entry_price, actual_price);
         // expected_reward_bps = (30600 - 30006) / 30006 * 10000 ≈ 197.99
@@ -1169,7 +1177,11 @@ mod tests {
         };
         // Adverse price slightly lower than original entry (short fills below open)
         let actual_price = 29_994.0;
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price, EntryGeometryMode::PreserveSignalLevels);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual_price,
+            EntryGeometryMode::PreserveSignalLevels,
+        );
 
         assert_eq!(adjusted.entry_price, actual_price);
         // expected_reward_bps = (29994 - 29400) / 29994 * 10000
@@ -1187,7 +1199,11 @@ mod tests {
         // Long signal: TP=30600, SL=29700. If actual entry >= TP, geometry invalid.
         let signal = long_signal(); // entry=30000, TP=30600, SL=29700
         let actual_price = 30_600.0; // == TP → invalid geometry for long (need entry < TP)
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price, EntryGeometryMode::PreserveSignalLevels);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual_price,
+            EntryGeometryMode::PreserveSignalLevels,
+        );
         assert!(
             !adjusted.valid_geometry(),
             "entry == take_profit must be invalid geometry for long"
@@ -1198,7 +1214,11 @@ mod tests {
     fn actual_entry_invalid_long_geometry_above_tp_is_rejected_not_fatal() {
         let signal = long_signal();
         let actual_price = 30_700.0; // > TP → definitely invalid
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price, EntryGeometryMode::PreserveSignalLevels);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual_price,
+            EntryGeometryMode::PreserveSignalLevels,
+        );
         assert!(
             !adjusted.valid_geometry(),
             "entry > take_profit must be invalid geometry for long"
@@ -1210,7 +1230,11 @@ mod tests {
         let signal = long_signal(); // entry=30000, TP=30600, SL=29700
         // Slippage of 2 bps on 30000 → 30006 < TP=30600 and > SL=29700 → valid
         let actual_price = FillModel::adverse_entry_price(Side::Long, 30_000.0, 2.0);
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual_price, EntryGeometryMode::PreserveSignalLevels);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual_price,
+            EntryGeometryMode::PreserveSignalLevels,
+        );
         assert!(
             adjusted.valid_geometry(),
             "normal slippage must not invalidate geometry: actual_price={actual_price}"

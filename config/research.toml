@@ -30,7 +30,9 @@ stop_slippage_bps = 5.0
 
 [backtest]
 data_dir = "data/historical"
-reports_dir = "reports"
+# reports_dir = "reports"
+reports_dir = "reports/reanchor"
 conservative_intrabar = true
 max_bars_held = 60
-entry_geometry_mode = "preserve_signal_levels"
+# entry_geometry_mode = "preserve_signal_levels"
+entry_geometry_mode = "reanchor_to_actual_entry"

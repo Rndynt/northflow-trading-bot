@@ -77,8 +77,12 @@ pub fn adjusted_signal_for_actual_entry(
     mode: EntryGeometryMode,
 ) -> Signal {
     match mode {
-        EntryGeometryMode::PreserveSignalLevels => preserve_signal_levels(signal, actual_entry_price),
-        EntryGeometryMode::ReanchorToActualEntry => reanchor_to_actual_entry(signal, actual_entry_price),
+        EntryGeometryMode::PreserveSignalLevels => {
+            preserve_signal_levels(signal, actual_entry_price)
+        }
+        EntryGeometryMode::ReanchorToActualEntry => {
+            reanchor_to_actual_entry(signal, actual_entry_price)
+        }
     }
 }
 
@@ -230,7 +234,10 @@ mod tests {
             "expected ConfigError, got: {err:?}"
         );
         let msg = err.to_string();
-        assert!(msg.contains("unknown_mode"), "error should name the bad value: {msg}");
+        assert!(
+            msg.contains("unknown_mode"),
+            "error should name the bad value: {msg}"
+        );
     }
 
     #[test]
@@ -256,11 +263,18 @@ mod tests {
     fn preserve_long_updates_entry_price_and_reward() {
         let signal = long_signal();
         let actual = 30_006.0;
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual, EntryGeometryMode::PreserveSignalLevels);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual,
+            EntryGeometryMode::PreserveSignalLevels,
+        );
 
         assert_eq!(adjusted.entry_price, actual);
         assert_eq!(adjusted.stop_loss, signal.stop_loss, "SL must not change");
-        assert_eq!(adjusted.take_profit, signal.take_profit, "TP must not change");
+        assert_eq!(
+            adjusted.take_profit, signal.take_profit,
+            "TP must not change"
+        );
         let expected_reward = (30_600.0 - actual) / actual * 10_000.0;
         assert!(
             (adjusted.expected_reward_bps - expected_reward).abs() < 1e-6,
@@ -276,14 +290,25 @@ mod tests {
     #[test]
     fn preserve_long_entry_at_tp_makes_invalid_geometry() {
         let signal = long_signal();
-        let adjusted = adjusted_signal_for_actual_entry(&signal, 30_600.0, EntryGeometryMode::PreserveSignalLevels);
-        assert!(!adjusted.valid_geometry(), "entry == TP must be invalid for long");
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            30_600.0,
+            EntryGeometryMode::PreserveSignalLevels,
+        );
+        assert!(
+            !adjusted.valid_geometry(),
+            "entry == TP must be invalid for long"
+        );
     }
 
     #[test]
     fn preserve_long_identity_fields_unchanged() {
         let signal = long_signal();
-        let adjusted = adjusted_signal_for_actual_entry(&signal, 30_006.0, EntryGeometryMode::PreserveSignalLevels);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            30_006.0,
+            EntryGeometryMode::PreserveSignalLevels,
+        );
         assert_eq!(adjusted.signal_id, signal.signal_id);
         assert_eq!(adjusted.side, signal.side);
         assert_eq!(adjusted.regime, signal.regime);
@@ -296,11 +321,18 @@ mod tests {
     fn preserve_short_updates_entry_price_and_reward() {
         let signal = short_signal();
         let actual = 29_994.0;
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual, EntryGeometryMode::PreserveSignalLevels);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual,
+            EntryGeometryMode::PreserveSignalLevels,
+        );
 
         assert_eq!(adjusted.entry_price, actual);
         assert_eq!(adjusted.stop_loss, signal.stop_loss, "SL must not change");
-        assert_eq!(adjusted.take_profit, signal.take_profit, "TP must not change");
+        assert_eq!(
+            adjusted.take_profit, signal.take_profit,
+            "TP must not change"
+        );
         let expected_reward = (actual - 29_400.0) / actual * 10_000.0;
         assert!(
             (adjusted.expected_reward_bps - expected_reward).abs() < 1e-6,
@@ -314,7 +346,11 @@ mod tests {
     fn reanchor_long_sl_tp_shift_by_risk_distance() {
         let signal = long_signal();
         let actual = 30_006.0;
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual, EntryGeometryMode::ReanchorToActualEntry);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual,
+            EntryGeometryMode::ReanchorToActualEntry,
+        );
 
         assert_eq!(adjusted.entry_price, actual);
         let expected_sl = actual - 300.0;
@@ -337,15 +373,26 @@ mod tests {
     fn reanchor_long_geometry_valid_after_normal_slippage() {
         let signal = long_signal();
         let actual = 30_006.0;
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual, EntryGeometryMode::ReanchorToActualEntry);
-        assert!(adjusted.valid_geometry(), "reanchored long must have valid geometry");
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual,
+            EntryGeometryMode::ReanchorToActualEntry,
+        );
+        assert!(
+            adjusted.valid_geometry(),
+            "reanchored long must have valid geometry"
+        );
     }
 
     #[test]
     fn reanchor_long_reward_bps_uses_new_tp() {
         let signal = long_signal();
         let actual = 30_006.0;
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual, EntryGeometryMode::ReanchorToActualEntry);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual,
+            EntryGeometryMode::ReanchorToActualEntry,
+        );
         let new_tp = actual + 600.0;
         let expected_reward = (new_tp - actual) / actual * 10_000.0;
         assert!(
@@ -357,7 +404,11 @@ mod tests {
     #[test]
     fn reanchor_long_preserves_identity_fields() {
         let signal = long_signal();
-        let adjusted = adjusted_signal_for_actual_entry(&signal, 30_006.0, EntryGeometryMode::ReanchorToActualEntry);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            30_006.0,
+            EntryGeometryMode::ReanchorToActualEntry,
+        );
         assert_eq!(adjusted.signal_id, signal.signal_id);
         assert_eq!(adjusted.side, signal.side);
         assert_eq!(adjusted.estimated_cost_bps, signal.estimated_cost_bps);
@@ -372,7 +423,11 @@ mod tests {
     fn reanchor_short_sl_tp_shift_by_risk_distance() {
         let signal = short_signal();
         let actual = 29_994.0;
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual, EntryGeometryMode::ReanchorToActualEntry);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual,
+            EntryGeometryMode::ReanchorToActualEntry,
+        );
 
         assert_eq!(adjusted.entry_price, actual);
         let expected_sl = actual + 300.0;
@@ -395,15 +450,26 @@ mod tests {
     fn reanchor_short_geometry_valid_after_normal_slippage() {
         let signal = short_signal();
         let actual = 29_994.0;
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual, EntryGeometryMode::ReanchorToActualEntry);
-        assert!(adjusted.valid_geometry(), "reanchored short must have valid geometry");
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual,
+            EntryGeometryMode::ReanchorToActualEntry,
+        );
+        assert!(
+            adjusted.valid_geometry(),
+            "reanchored short must have valid geometry"
+        );
     }
 
     #[test]
     fn reanchor_short_reward_bps_uses_new_tp() {
         let signal = short_signal();
         let actual = 29_994.0;
-        let adjusted = adjusted_signal_for_actual_entry(&signal, actual, EntryGeometryMode::ReanchorToActualEntry);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            actual,
+            EntryGeometryMode::ReanchorToActualEntry,
+        );
         let new_tp = actual - 600.0;
         let expected_reward = (actual - new_tp) / actual * 10_000.0;
         assert!(
@@ -417,14 +483,19 @@ mod tests {
     #[test]
     fn preserve_zero_entry_gives_zero_reward() {
         let signal = long_signal();
-        let adjusted = adjusted_signal_for_actual_entry(&signal, 0.0, EntryGeometryMode::PreserveSignalLevels);
+        let adjusted =
+            adjusted_signal_for_actual_entry(&signal, 0.0, EntryGeometryMode::PreserveSignalLevels);
         assert_eq!(adjusted.expected_reward_bps, 0.0);
     }
 
     #[test]
     fn reanchor_zero_entry_gives_zero_reward() {
         let signal = long_signal();
-        let adjusted = adjusted_signal_for_actual_entry(&signal, 0.0, EntryGeometryMode::ReanchorToActualEntry);
+        let adjusted = adjusted_signal_for_actual_entry(
+            &signal,
+            0.0,
+            EntryGeometryMode::ReanchorToActualEntry,
+        );
         assert_eq!(adjusted.expected_reward_bps, 0.0);
     }
 }

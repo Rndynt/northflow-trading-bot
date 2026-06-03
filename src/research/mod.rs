@@ -52,7 +52,10 @@ pub fn run_research(cfg: &ResearchConfig) -> Result<(), String> {
     );
     println!();
     println!("  Entry geometry mode:");
-    println!("    entry_geometry_mode    = \"{}\"", cfg.entry_geometry_mode);
+    println!(
+        "    entry_geometry_mode    = \"{}\"",
+        cfg.entry_geometry_mode
+    );
     println!();
     println!("  paper mode  DISABLED — research engine not yet validated for paper");
     println!("  live mode   DISABLED — paper/live parity not yet proven");
