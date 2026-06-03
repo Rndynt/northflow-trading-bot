@@ -6,6 +6,7 @@ dry_run = true
 symbols = ["BTCUSDT"]
 entry_timeframe = "1m"
 screening_timeframe = "15m"
+confirmation_timeframe = "5m"
 
 [strategy]
 active = "screened_vwap_scalp"
