@@ -1,9 +1,16 @@
-//! Research orchestrator — Phase 6: Backtest Engine.
+//! Research orchestrator — Phase 7: Reports and Attribution.
 //!
 //! Runs the deterministic backtest for each configured symbol and writes:
 //!   reports/backtest_summary.json
 //!   reports/trades.csv
 //!   reports/equity_curve.csv
+//!   reports/attribution_summary.json
+//!   reports/attribution_by_regime.csv
+//!   reports/attribution_by_exit_reason.csv
+//!   reports/attribution_by_side.csv
+//!   reports/attribution_by_filter.csv
+//!   reports/audit_report.json
+//!   reports/report_manifest.json
 //!
 //! Paper and live modes remain disabled.
 
@@ -13,15 +20,16 @@ use crate::backtest::{BacktestEngine, ReportWriter};
 use crate::config::ResearchConfig;
 use crate::core::Timeframe;
 use crate::market::{DataQualityIssueKind, OhlcvLoader};
+use crate::report::{AttributionEngine, AttributionWriter, ManifestWriter, ReportAuditor};
 
-/// Run Phase 6 research: deterministic backtest + report generation.
+/// Run Phase 7 research: deterministic backtest + full attribution report generation.
 ///
 /// Validates config, loads market data, runs the backtest engine, prints a
-/// truthful summary, and writes report files.  Does not claim the strategy is
+/// truthful summary, and writes all report files.  Does not claim the strategy is
 /// profitable.  Does not give trading advice.
 pub fn run_research(cfg: &ResearchConfig) -> Result<(), String> {
     println!("=================================================================");
-    println!(" Northflow — Phase 6: Backtest Engine");
+    println!(" Northflow — Phase 7: Reports and Attribution");
     println!("=================================================================");
     println!();
 
@@ -90,7 +98,7 @@ fn run_symbol(cfg: &ResearchConfig, symbol: &str) {
         return;
     }
 
-    // Print data quality summary (mirrors Phase 5 output).
+    // Print data quality summary.
     let data_quality_ok = print_data_quality(cfg, symbol, &csv_path);
     if !data_quality_ok {
         println!("  Skipping backtest — fix data quality errors first.");
@@ -127,7 +135,7 @@ fn run_symbol(cfg: &ResearchConfig, symbol: &str) {
             println!("    Max consecutive losses: {}", s.max_consecutive_losses);
             println!();
 
-            // Write report files.
+            // ── Phase 6: base report files ────────────────────────────────────
             match ReportWriter::write_all(
                 &cfg.reports_dir,
                 &result.summary,
@@ -135,13 +143,84 @@ fn run_symbol(cfg: &ResearchConfig, symbol: &str) {
                 &result.equity_curve,
             ) {
                 Ok(()) => {
-                    println!("  Reports written:");
+                    println!("  Base reports written:");
                     println!("    {}/backtest_summary.json", cfg.reports_dir);
                     println!("    {}/trades.csv", cfg.reports_dir);
                     println!("    {}/equity_curve.csv", cfg.reports_dir);
                 }
                 Err(e) => {
-                    println!("  Warning: could not write reports: {e}");
+                    println!("  Warning: could not write base reports: {e}");
+                }
+            }
+            println!();
+
+            // ── Phase 7: attribution, audit, and manifest ─────────────────────
+            let attribution = AttributionEngine::build(&result.trades);
+            let audit = ReportAuditor::audit_trades(&result.trades);
+            let manifest = ManifestWriter::build(
+                &cfg.reports_dir,
+                &result.trades,
+                &result.equity_curve,
+                &attribution,
+            );
+
+            // Audit summary — print before writing so the user sees results
+            // even if file I/O fails.
+            println!("  Audit report:");
+            println!(
+                "    passed:   {}",
+                if audit.passed { "true" } else { "false" }
+            );
+            println!("    errors:   {}", audit.error_count);
+            println!("    warnings: {}", audit.warning_count);
+
+            if !audit.passed {
+                println!(
+                    "  Warning: audit found {} error(s) — check audit_report.json",
+                    audit.error_count
+                );
+                for issue in audit
+                    .issues
+                    .iter()
+                    .filter(|i| i.severity == crate::report::AuditSeverity::Error)
+                {
+                    println!("    [ERROR] {} — {}", issue.code, issue.message);
+                }
+            }
+            println!();
+
+            // Attribution summary.
+            let attr_s = &attribution.summary;
+            println!("  Attribution summary:");
+            println!("    Unique signals:         {}", attr_s.unique_signal_ids);
+            println!(
+                "    Avg expected edge bps:  {:.2}",
+                attr_s.avg_expected_edge_bps
+            );
+            println!(
+                "    Avg actual edge bps:    {:.2}",
+                attr_s.avg_actual_edge_bps
+            );
+            println!(
+                "    Edge realization bps:   {:.2}",
+                attr_s.edge_realization_bps
+            );
+            println!();
+
+            // Write Phase 7 files. Do not panic on write failure — warn clearly.
+            match AttributionWriter::write_all(&cfg.reports_dir, &attribution, &audit, &manifest) {
+                Ok(()) => {
+                    println!("  Phase 7 reports written:");
+                    println!("    {}/attribution_summary.json", cfg.reports_dir);
+                    println!("    {}/attribution_by_regime.csv", cfg.reports_dir);
+                    println!("    {}/attribution_by_exit_reason.csv", cfg.reports_dir);
+                    println!("    {}/attribution_by_side.csv", cfg.reports_dir);
+                    println!("    {}/attribution_by_filter.csv", cfg.reports_dir);
+                    println!("    {}/audit_report.json", cfg.reports_dir);
+                    println!("    {}/report_manifest.json", cfg.reports_dir);
+                }
+                Err(e) => {
+                    println!("  Warning: could not write Phase 7 reports: {e}");
                 }
             }
             println!();

@@ -6,6 +6,7 @@
 //! Phase 4: strategy engine (screened_vwap_scalp) — COMPLETE
 //! Phase 5: risk and cost model — COMPLETE
 //! Phase 6: backtest engine — COMPLETE
+//! Phase 7: reports and attribution — COMPLETE
 
 pub mod advisor;
 pub mod backtest;
