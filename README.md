@@ -86,8 +86,8 @@ Invalid candles are rejected and recorded in the data quality report. No silent 
 ### Interval and gap detection
 
 - **Duplicate timestamps**: first occurrence is kept, subsequent duplicates rejected and reported.
-- **Missing 1m gaps**: delta > 60 000 ms between consecutive candles — detected and reported with exact missing count (warning, not fatal in Phase 2).
-- **Irregular sub-minute intervals**: delta < 60 000 ms between consecutive candles — detected and reported as an **error**. This indicates the source data is not 1m OHLCV.
+- **Missing 1m gaps**: delta is a positive exact multiple of 60 000 ms (e.g. 120 000, 180 000) — detected and reported with exact missing count (warning, not fatal in Phase 2). Clean gaps require the delta to be divisible by 60 000 ms with no remainder.
+- **Irregular intervals**: any delta that is not an exact multiple of 60 000 ms — detected and reported as an **error**. This includes sub-minute deltas (e.g. 30 000 ms) and non-multiple super-minute deltas (e.g. 90 000 ms, 150 000 ms). These indicate the source data is not valid 1m OHLCV.
 - **Non-monotonic input**: detected before sorting and flagged in the quality report.
 
 ### Timeframe buckets require exact candle counts

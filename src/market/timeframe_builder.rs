@@ -12,6 +12,11 @@
 //!   - Bucket alignment (timestamps in milliseconds):
 //!       5m  → bucket_start = ts - (ts % 300_000)
 //!       15m → bucket_start = ts - (ts % 900_000)
+//!
+//! Generic aggregation rule (for future phases):
+//!   required_count = target_timeframe_ms / source_timeframe_ms
+//!   target_timeframe_ms must be divisible by source_timeframe_ms.
+//!   Phase 2 currently assumes source timeframe is 1m (60_000 ms).
 
 use std::collections::BTreeMap;
 

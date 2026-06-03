@@ -9,8 +9,14 @@
 //!   - Reports every rejected row in DataQualityReport; never panics on bad data.
 //!   - Sorts output candles ascending by timestamp.
 //!   - Detects non-monotonic input, duplicate timestamps (keep first),
-//!     missing 1m gaps (delta > 60_000 ms — warning), and
-//!     irregular sub-minute intervals (delta < 60_000 ms — error).
+//!     missing 1m gaps (delta is a positive exact multiple of 60_000 ms — warning), and
+//!     irregular intervals (delta is not an exact multiple of 60_000 ms — error).
+//!
+//! Interval classification (after sort + dedup):
+//!   delta == SOURCE_TIMEFRAME_MS               → Exact (valid)
+//!   delta >  SOURCE_TIMEFRAME_MS
+//!     && delta % SOURCE_TIMEFRAME_MS == 0      → MissingGap (warning)
+//!   anything else (including 90_000, 150_000)  → Irregular (error)
 
 use std::path::Path;
 
@@ -21,8 +27,46 @@ use crate::market::data_quality::{DataQualityIssueKind, DataQualityReport, Missi
 /// by 1_000 to convert to milliseconds.  (~year 2001 in ms = 10^12)
 const SECONDS_THRESHOLD: i64 = 1_000_000_000_000;
 
-/// Expected gap between consecutive 1m candles (milliseconds).
-const ONE_MINUTE_MS: i64 = 60_000;
+/// Expected interval between consecutive candles for the Phase 2 source timeframe (1m).
+///
+/// Future phases may make source_interval_ms configurable.
+/// The generic rule is:
+///   target_timeframe_ms must be divisible by source_timeframe_ms.
+///   required_count = target_timeframe_ms / source_timeframe_ms.
+/// For now, Phase 2 source data is fixed to 1m.
+const SOURCE_TIMEFRAME_MS: i64 = 60_000;
+
+// ── private interval classification ─────────────────────────────────────────
+
+/// Result of classifying a delta between two consecutive sorted, deduped candles.
+enum IntervalClassification {
+    /// Delta equals exactly one source interval — correct 1m sequence.
+    Exact,
+    /// Delta is a positive exact multiple of the source interval — one or more
+    /// candles are absent but the boundary timestamps are aligned.
+    MissingGap { missing_count: u64 },
+    /// Delta is anything else: sub-interval, non-multiple super-interval, or ≤ 0.
+    /// Examples: 30_000, 90_000, 150_000.
+    Irregular,
+}
+
+/// Classify the millisecond delta between two adjacent sorted candle timestamps.
+///
+/// `source_interval_ms` is the expected candle-to-candle interval for the source
+/// data (60_000 for 1m).  The function is generic so future phases can pass a
+/// different source interval without changing the calling code.
+fn classify_interval_delta(delta: i64, source_interval_ms: i64) -> IntervalClassification {
+    if delta == source_interval_ms {
+        IntervalClassification::Exact
+    } else if delta > source_interval_ms && delta % source_interval_ms == 0 {
+        let missing_count = (delta / source_interval_ms) as u64 - 1;
+        IntervalClassification::MissingGap { missing_count }
+    } else {
+        IntervalClassification::Irregular
+    }
+}
+
+// ── public types ─────────────────────────────────────────────────────────────
 
 pub struct OhlcvLoadResult {
     /// Sorted, deduplicated, validated 1m candles.
@@ -32,6 +76,8 @@ pub struct OhlcvLoadResult {
 }
 
 pub struct OhlcvLoader;
+
+// ── private helpers ──────────────────────────────────────────────────────────
 
 /// Parse a raw timestamp string into a millisecond Unix timestamp.
 ///
@@ -56,6 +102,8 @@ fn parse_timestamp_ms(raw: &str) -> Result<i64, String> {
         Ok(ts)
     }
 }
+
+// ── OhlcvLoader impl ─────────────────────────────────────────────────────────
 
 impl OhlcvLoader {
     /// Load a 1m OHLCV CSV file from disk.
@@ -204,7 +252,7 @@ impl OhlcvLoader {
                 }
             };
 
-            // Parse OHLCV — macro avoids repeating error-handling boilerplate
+            // Parse OHLCV — macro avoids repeating error-handling boilerplate.
             macro_rules! parse_f {
                 ($idx:expr, $label:expr) => {{
                     match fields[$idx].trim().parse::<f64>() {
@@ -229,7 +277,7 @@ impl OhlcvLoader {
             let close = parse_f!(close_i, "close");
             let volume = parse_f!(vol_i, "volume");
 
-            // Validate candle geometry and value ranges
+            // Validate candle geometry and value ranges.
             let candle = Candle {
                 timestamp: ts_ms,
                 open,
@@ -252,7 +300,7 @@ impl OhlcvLoader {
             candidates.push(candle);
         }
 
-        // Header-only file (no data rows at all)
+        // Header-only file (no data rows at all).
         if quality.total_rows == 0 {
             quality.push_issue(
                 DataQualityIssueKind::EmptyFile,
@@ -303,45 +351,55 @@ impl OhlcvLoader {
             deduped.push(candle);
         }
 
-        // ── detect interval issues: missing gaps and irregular intervals ──────
+        // ── classify every consecutive-candle interval ────────────────────────
+        //
+        // Valid 1m source data has delta == SOURCE_TIMEFRAME_MS (60_000 ms) between
+        // every pair.  Any other delta is either a clean aligned gap or irregular
+        // source data:
+        //
+        //   delta == 60_000               → Exact       (OK)
+        //   delta >  60_000, multiple     → MissingGap  (warning; e.g. 120_000, 180_000)
+        //   delta >  60_000, non-multiple → Irregular   (error;   e.g. 90_000, 150_000)
+        //   delta <  60_000               → Irregular   (error;   e.g. 30_000)
+        //   delta <= 0 (defensive)        → Irregular   (error)
         for i in 1..deduped.len() {
             let prev_ts = deduped[i - 1].timestamp;
             let curr_ts = deduped[i].timestamp;
             let delta = curr_ts - prev_ts;
 
-            if delta == ONE_MINUTE_MS {
-                // Exact 1m interval — correct, nothing to report.
-            } else if delta > ONE_MINUTE_MS {
-                // Gap: one or more 1m candles are absent.
-                let missing_count = (delta / ONE_MINUTE_MS) as u64 - 1;
-                let expected_next = prev_ts + ONE_MINUTE_MS;
-
-                quality.missing_gaps.push(MissingCandleGap {
-                    from_timestamp: prev_ts,
-                    to_timestamp: curr_ts,
-                    expected_next_timestamp: expected_next,
-                    missing_count,
-                });
-                quality.push_issue(
-                    DataQualityIssueKind::MissingCandleGap,
-                    None,
-                    Some(expected_next),
-                    format!(
-                        "missing {missing_count} candle(s) between ts={prev_ts} and ts={curr_ts}"
-                    ),
-                );
-            } else {
-                // delta < ONE_MINUTE_MS (and > 0, since duplicates were removed).
-                // This is a sub-minute interval — data source is not 1m OHLCV.
-                quality.push_issue(
-                    DataQualityIssueKind::IrregularInterval,
-                    None,
-                    Some(curr_ts),
-                    format!(
-                        "irregular 1m interval: prev={prev_ts} current={curr_ts} \
-                         delta={delta} expected={ONE_MINUTE_MS}"
-                    ),
-                );
+            match classify_interval_delta(delta, SOURCE_TIMEFRAME_MS) {
+                IntervalClassification::Exact => {
+                    // Correct 1m step — nothing to report.
+                }
+                IntervalClassification::MissingGap { missing_count } => {
+                    let expected_next = prev_ts + SOURCE_TIMEFRAME_MS;
+                    quality.missing_gaps.push(MissingCandleGap {
+                        from_timestamp: prev_ts,
+                        to_timestamp: curr_ts,
+                        expected_next_timestamp: expected_next,
+                        missing_count,
+                    });
+                    quality.push_issue(
+                        DataQualityIssueKind::MissingCandleGap,
+                        None,
+                        Some(expected_next),
+                        format!(
+                            "missing {missing_count} candle(s) between \
+                             ts={prev_ts} and ts={curr_ts}"
+                        ),
+                    );
+                }
+                IntervalClassification::Irregular => {
+                    quality.push_issue(
+                        DataQualityIssueKind::IrregularInterval,
+                        None,
+                        Some(curr_ts),
+                        format!(
+                            "irregular 1m interval: prev={prev_ts} current={curr_ts} \
+                             delta={delta} expected={SOURCE_TIMEFRAME_MS}"
+                        ),
+                    );
+                }
             }
         }
 
@@ -601,7 +659,7 @@ mod tests {
     fn no_missing_gap_for_continuous_1m_candles() {
         let base = 1_700_000_000_000_i64;
         let rows: String = (0..5)
-            .map(|i| row_ms(base + i * ONE_MINUTE_MS))
+            .map(|i| row_ms(base + i * SOURCE_TIMEFRAME_MS))
             .collect::<Vec<_>>()
             .join("\n");
         let csv = format!("{HDR}\n{rows}\n");
@@ -617,7 +675,7 @@ mod tests {
         let csv = format!(
             "{HDR}\n{}\n{}\n",
             row_ms(base),
-            row_ms(base + 2 * ONE_MINUTE_MS),
+            row_ms(base + 2 * SOURCE_TIMEFRAME_MS),
         );
         let r = OhlcvLoader::load_csv("test", &csv);
         assert_eq!(r.quality.missing_gaps.len(), 1);
@@ -631,14 +689,14 @@ mod tests {
         let csv = format!(
             "{HDR}\n{}\n{}\n",
             row_ms(base),
-            row_ms(base + 5 * ONE_MINUTE_MS),
+            row_ms(base + 5 * SOURCE_TIMEFRAME_MS),
         );
         let r = OhlcvLoader::load_csv("test", &csv);
         assert_eq!(r.quality.missing_gaps.len(), 1);
         assert_eq!(r.quality.missing_gaps[0].missing_count, 4);
         assert_eq!(
             r.quality.missing_gaps[0].expected_next_timestamp,
-            base + ONE_MINUTE_MS
+            base + SOURCE_TIMEFRAME_MS
         );
     }
 
@@ -646,13 +704,13 @@ mod tests {
 
     #[test]
     fn detects_irregular_sub_minute_interval() {
-        // Three candles: t, t+30s, t+60s — delta between first two is 30_000 ms < 60_000.
+        // Three candles: t, t+30s, t+2m — delta between first two is 30_000 ms.
         let base = 1_700_000_000_000_i64;
         let csv = format!(
             "{HDR}\n{}\n{}\n{}\n",
             row_ms(base),
-            row_ms(base + 30_000),            // +30 seconds — irregular
-            row_ms(base + 2 * ONE_MINUTE_MS), // +2 min — regular gap from original base
+            row_ms(base + 30_000), // +30 seconds — irregular
+            row_ms(base + 2 * SOURCE_TIMEFRAME_MS),
         );
         let r = OhlcvLoader::load_csv("test", &csv);
         assert!(
@@ -665,10 +723,148 @@ mod tests {
     }
 
     #[test]
+    fn detects_irregular_90_second_interval() {
+        // delta = 90_000 ms — greater than 60_000 but NOT a multiple of 60_000.
+        let base = 1_700_000_000_000_i64;
+        let csv = format!("{HDR}\n{}\n{}\n", row_ms(base), row_ms(base + 90_000),);
+        let r = OhlcvLoader::load_csv("test", &csv);
+        assert!(
+            r.quality
+                .issues
+                .iter()
+                .any(|i| i.kind == DataQualityIssueKind::IrregularInterval),
+            "90_000 ms delta must be IrregularInterval"
+        );
+        assert!(
+            r.quality.missing_gaps.is_empty(),
+            "90_000 ms delta must not create a MissingCandleGap"
+        );
+        assert!(r.quality.has_errors());
+    }
+
+    #[test]
+    fn detects_irregular_150_second_interval() {
+        // delta = 150_000 ms — greater than 60_000 but NOT a multiple of 60_000.
+        let base = 1_700_000_000_000_i64;
+        let csv = format!("{HDR}\n{}\n{}\n", row_ms(base), row_ms(base + 150_000),);
+        let r = OhlcvLoader::load_csv("test", &csv);
+        assert!(
+            r.quality
+                .issues
+                .iter()
+                .any(|i| i.kind == DataQualityIssueKind::IrregularInterval),
+            "150_000 ms delta must be IrregularInterval"
+        );
+        assert!(
+            r.quality.missing_gaps.is_empty(),
+            "150_000 ms delta must not create a MissingCandleGap"
+        );
+        assert!(r.quality.has_errors());
+    }
+
+    #[test]
+    fn does_not_create_missing_gap_with_zero_missing_count() {
+        // delta = 90_000 ms would give missing_count = 90_000 / 60_000 - 1 = 0
+        // if the old non-modulo path were used.  The new path must not do that.
+        let base = 1_700_000_000_000_i64;
+        let csv = format!("{HDR}\n{}\n{}\n", row_ms(base), row_ms(base + 90_000),);
+        let r = OhlcvLoader::load_csv("test", &csv);
+        assert!(
+            r.quality.missing_gaps.is_empty(),
+            "no MissingCandleGap must be created for a non-multiple delta"
+        );
+        assert!(
+            !r.quality.missing_gaps.iter().any(|g| g.missing_count == 0),
+            "no MissingCandleGap may have missing_count == 0"
+        );
+    }
+
+    #[test]
+    fn still_detects_clean_2m_gap_as_missing_count_1() {
+        // delta = 120_000 ms — exact multiple of 60_000 → MissingCandleGap, missing_count=1.
+        let base = 1_700_000_000_000_i64;
+        let csv = format!("{HDR}\n{}\n{}\n", row_ms(base), row_ms(base + 120_000),);
+        let r = OhlcvLoader::load_csv("test", &csv);
+        assert_eq!(r.quality.missing_gaps.len(), 1, "expected one missing gap");
+        assert_eq!(
+            r.quality.missing_gaps[0].missing_count, 1,
+            "missing_count must be 1 for a 2m gap"
+        );
+        assert!(
+            r.quality
+                .issues
+                .iter()
+                .any(|i| i.kind == DataQualityIssueKind::MissingCandleGap),
+            "MissingCandleGap issue must be recorded"
+        );
+        assert!(
+            !r.quality
+                .issues
+                .iter()
+                .any(|i| i.kind == DataQualityIssueKind::IrregularInterval),
+            "IrregularInterval must not be recorded for a clean 2m gap"
+        );
+    }
+
+    #[test]
+    fn still_detects_clean_3m_gap_as_missing_count_2() {
+        // delta = 180_000 ms — exact multiple of 60_000 → MissingCandleGap, missing_count=2.
+        let base = 1_700_000_000_000_i64;
+        let csv = format!("{HDR}\n{}\n{}\n", row_ms(base), row_ms(base + 180_000),);
+        let r = OhlcvLoader::load_csv("test", &csv);
+        assert_eq!(r.quality.missing_gaps.len(), 1, "expected one missing gap");
+        assert_eq!(
+            r.quality.missing_gaps[0].missing_count, 2,
+            "missing_count must be 2 for a 3m gap"
+        );
+        assert!(
+            r.quality
+                .issues
+                .iter()
+                .any(|i| i.kind == DataQualityIssueKind::MissingCandleGap),
+            "MissingCandleGap issue must be recorded"
+        );
+        assert!(
+            !r.quality
+                .issues
+                .iter()
+                .any(|i| i.kind == DataQualityIssueKind::IrregularInterval),
+            "IrregularInterval must not be recorded for a clean 3m gap"
+        );
+    }
+
+    #[test]
+    fn classifies_exact_60_second_interval_as_valid() {
+        // delta = 60_000 ms — exact source interval → no issue at all.
+        let base = 1_700_000_000_000_i64;
+        let csv = format!(
+            "{HDR}\n{}\n{}\n",
+            row_ms(base),
+            row_ms(base + SOURCE_TIMEFRAME_MS),
+        );
+        let r = OhlcvLoader::load_csv("test", &csv);
+        assert!(
+            r.quality.missing_gaps.is_empty(),
+            "exact 1m interval must produce no missing gap"
+        );
+        assert!(
+            !r.quality
+                .issues
+                .iter()
+                .any(|i| i.kind == DataQualityIssueKind::IrregularInterval),
+            "exact 1m interval must produce no IrregularInterval"
+        );
+        assert!(
+            !r.quality.has_errors(),
+            "exact 1m interval must produce no errors"
+        );
+    }
+
+    #[test]
     fn does_not_flag_irregular_interval_for_valid_1m_sequence() {
         let base = 1_700_000_000_000_i64;
         let rows: String = (0..5)
-            .map(|i| row_ms(base + i * ONE_MINUTE_MS))
+            .map(|i| row_ms(base + i * SOURCE_TIMEFRAME_MS))
             .collect::<Vec<_>>()
             .join("\n");
         let csv = format!("{HDR}\n{rows}\n");
@@ -687,7 +883,7 @@ mod tests {
         let csv = format!(
             "{HDR}\n{}\n{}\n",
             row_ms(base),
-            row_ms(base + 3 * ONE_MINUTE_MS), // 3m gap → 2 candles missing
+            row_ms(base + 3 * SOURCE_TIMEFRAME_MS), // 3m gap → 2 candles missing
         );
         let r = OhlcvLoader::load_csv("test", &csv);
         assert_eq!(r.quality.missing_gaps.len(), 1);
