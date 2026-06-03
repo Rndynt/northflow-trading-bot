@@ -1,7 +1,8 @@
 //! Report manifest — deterministic description of all generated report files.
 //!
 //! Does not use system time. Does not use random IDs.
-//! Uses relative paths (e.g. reports/trades.csv).
+//! Uses relative paths (e.g. reports/trades.csv), even when `reports_dir` is
+//! configured as an absolute path for local file output.
 //! File entries are sorted by path ascending.
 
 use std::fs;
@@ -38,13 +39,17 @@ impl ManifestWriter {
     ///
     /// File entries are sorted by path ascending for deterministic output.
     /// Row counts reflect the actual data written.
+    ///
+    /// The manifest is intentionally machine-independent: paths are display-only
+    /// relative paths and never absolute paths, even if `reports_dir` is an
+    /// absolute path such as `/tmp/reports`.
     pub fn build(
         reports_dir: &str,
         trades: &[Trade],
         equity_curve: &[EquityPoint],
         attribution: &AttributionReport,
     ) -> ReportManifest {
-        let dir = reports_dir.trim_end_matches('/');
+        let dir = manifest_display_dir(reports_dir);
 
         let mut entries: std::collections::BTreeMap<String, (&str, usize)> =
             std::collections::BTreeMap::new();
@@ -140,6 +145,27 @@ impl ManifestWriter {
     }
 }
 
+/// Convert the configured reports directory into a deterministic display-only
+/// relative path for the manifest.
+///
+/// The actual writer still uses `reports_dir` exactly as configured. This helper
+/// only controls manifest metadata so the file is portable across machines.
+fn manifest_display_dir(reports_dir: &str) -> String {
+    let trimmed = reports_dir.trim().trim_matches('/');
+    if trimmed.is_empty() {
+        return "reports".to_string();
+    }
+
+    let path = Path::new(trimmed);
+    let display = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("reports");
+
+    display.to_string()
+}
+
 /// Minimal JSON string escaping.
 fn json_str(s: &str) -> String {
     let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
@@ -204,6 +230,23 @@ mod tests {
     }
 
     #[test]
+    fn manifest_normalizes_absolute_reports_dir_to_relative_paths() {
+        let m = make_manifest("/tmp/northflow/reports");
+        for f in &m.files {
+            assert!(
+                !f.path.starts_with('/'),
+                "manifest paths must remain relative even for absolute reports_dir, got: {}",
+                f.path
+            );
+            assert!(
+                f.path.starts_with("reports/"),
+                "manifest should use the reports directory basename, got: {}",
+                f.path
+            );
+        }
+    }
+
+    #[test]
     fn manifest_sorts_files_by_path() {
         let m = make_manifest("reports");
         let paths: Vec<&str> = m.files.iter().map(|f| f.path.as_str()).collect();
@@ -229,6 +272,10 @@ mod tests {
         assert!(content.contains("\"phase\""));
         assert!(content.contains("phase_7_reports_and_attribution"));
         assert!(content.contains("\"files\""));
+        assert!(
+            !content.contains(&format!("\"path\":\"{dir}/")),
+            "manifest JSON must not include absolute output paths"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }
