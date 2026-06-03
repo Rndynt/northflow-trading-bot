@@ -1,7 +1,6 @@
-//! Research orchestrator — Phase 2: market data summary.
+//! Research orchestrator — Phase 3: indicators ready; data summary active.
 //!
 //! Full backtest loop will be activated in later phases once:
-//!   Phase 3: indicators (EMA, ATR, VWAP)
 //!   Phase 4: screened_vwap_scalp strategy
 //!   Phase 5: risk + cost model
 //!   Phase 6: backtest engine
@@ -13,17 +12,18 @@ use crate::config::ResearchConfig;
 use crate::core::Timeframe;
 use crate::market::{CandleStore, DataQualityIssueKind, OhlcvLoader};
 
-/// Run Phase 2 market data summary.
+/// Run Phase 3 research summary.
 ///
-/// Does not run a backtest. Does not generate fake results.
-/// Does not write reports.
+/// Validates config, loads market data, builds candle store, and prints a
+/// truthful data + indicator readiness summary.
+/// Does not run a backtest. Does not generate fake results. Does not write reports.
 pub fn run_research(cfg: &ResearchConfig) -> Result<(), String> {
     println!("=================================================================");
-    println!(" Northflow — Phase 2: Market Data Foundation");
+    println!(" Northflow — Phase 3: Indicators");
     println!("=================================================================");
     println!();
 
-    // Validate explicit timeframe roles
+    // Validate explicit timeframe roles.
     cfg.validate_timeframes().map_err(|e| format!("{e}"))?;
 
     println!("  Timeframe model:");
@@ -47,6 +47,15 @@ pub fn run_research(cfg: &ResearchConfig) -> Result<(), String> {
     for symbol in &cfg.symbols {
         run_symbol(cfg, symbol);
     }
+
+    println!("Indicators ready:");
+    println!("  EMA 8 / 21 / 50 / 200");
+    println!("  ATR 14 (Wilder smoothing)");
+    println!("  VWAP (session-cumulative)");
+    println!("  Volume SMA 20");
+    println!();
+    println!("Next: Phase 4 — strategy engine");
+    println!();
 
     Ok(())
 }
@@ -123,7 +132,5 @@ fn run_symbol(cfg: &ResearchConfig, symbol: &str) {
         }
     }
 
-    println!();
-    println!("Next: Phase 3 — indicators");
     println!();
 }

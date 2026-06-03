@@ -2,19 +2,35 @@
 
 A pure Rust CLI and library for deterministic, research-first crypto strategy backtesting.
 
-## Current phase: Phase 2 — Market Data Foundation ✓
+## Current phase: Phase 3 — Indicators ✓
 
 | Phase | Status |
 |---|---|
 | Phase 1 — Core Domain (Candle, Signal, Order, Trade …) | ✅ Complete |
 | Phase 2 — Market Data (OHLCV loader, timeframe builder, data quality) | ✅ Complete |
-| Phase 3 — Indicators (EMA, ATR, VWAP) | ⏳ Next |
+| Phase 3 — Indicators (EMA 8/21/50/200, ATR 14, VWAP, Volume SMA 20) | ✅ Complete |
 | Phase 4 — Strategy (screened_vwap_scalp) | ⏳ Pending |
 | Phase 5 — Risk & Cost model | ⏳ Pending |
 | Phase 6 — Backtest engine | ⏳ Pending |
 | Phase 7 — Reports & Attribution | ⏳ Pending |
 
 See `docs/ROADMAP.md` for full roadmap and architecture decisions.
+
+---
+
+## Phase 3 indicators
+
+All indicators are deterministic, streaming, and consume validated `Candle` values.
+No network, no interpolation, no synthetic candles.
+
+| Indicator | Period | Notes |
+|---|---|---|
+| EMA | 8, 21, 50, 200 | First price initialises directly; alpha = 2/(period+1) |
+| ATR | 14 | Wilder smoothing; initial value = mean of first 14 TRs |
+| VWAP | — | Session-cumulative; typical = (H+L+C)/3; zero-volume safe |
+| Volume SMA | 20 | Rolling window; `VecDeque` with O(1) update |
+
+Paper and live modes remain disabled. No strategy, backtest, or report generation yet.
 
 ---
 
@@ -45,8 +61,6 @@ entry_timeframe        = "1m"   # entry and execution signals
 screening_timeframe    = "15m"  # market regime / bias filter
 confirmation_timeframe = "5m"   # intermediate confirmation layer
 ```
-
-The Phase 2 config validator rejects any deviation from these roles.
 
 ### CSV source must be 1m OHLCV
 
@@ -86,7 +100,7 @@ Invalid candles are rejected and recorded in the data quality report. No silent 
 ### Interval and gap detection
 
 - **Duplicate timestamps**: first occurrence is kept, subsequent duplicates rejected and reported.
-- **Missing 1m gaps**: delta is a positive exact multiple of 60 000 ms (e.g. 120 000, 180 000) — detected and reported with exact missing count (warning, not fatal in Phase 2). Clean gaps require the delta to be divisible by 60 000 ms with no remainder.
+- **Missing 1m gaps**: delta is a positive exact multiple of 60 000 ms (e.g. 120 000, 180 000) — detected and reported with exact missing count (warning, not fatal). Clean gaps require the delta to be divisible by 60 000 ms with no remainder.
 - **Irregular intervals**: any delta that is not an exact multiple of 60 000 ms — detected and reported as an **error**. This includes sub-minute deltas (e.g. 30 000 ms) and non-multiple super-minute deltas (e.g. 90 000 ms, 150 000 ms). These indicate the source data is not valid 1m OHLCV.
 - **Non-monotonic input**: detected before sorting and flagged in the quality report.
 
@@ -109,11 +123,13 @@ These modes will be enabled only after the research engine produces validated, t
 
 ### No fake backtest results
 
-`cargo run -- research` prints a truthful market data summary — candle counts, data quality issues, missing gaps. It does not claim profitability or generate fake trades.
+`cargo run -- research` prints a truthful market data summary — candle counts, data quality
+issues, missing gaps, indicator readiness. It does not claim profitability or generate fake trades.
 
 ### Legacy code is reference-only
 
-Previous code under `legacy/aria/` is preserved for reference only. The active `src/` tree never imports from `legacy/`. See `legacy/README.md`.
+Previous code under `legacy/aria/` is preserved for reference only. The active `src/` tree
+never imports from `legacy/`. See `legacy/README.md`.
 
 ---
 
@@ -150,13 +166,17 @@ northflow-crypto-trading-bot/
 │   │   ├── candle_store.rs — CandleStore (1m + 5m + 15m)
 │   │   ├── timeframe_builder.rs — Aggregate 1m → 5m/15m
 │   │   └── data_quality.rs — DataQualityReport, issue detection
+│   ├── indicators/         — Phase 3: deterministic streaming indicators
+│   │   ├── ema.rs          — EMA (periods: 8, 21, 50, 200)
+│   │   ├── atr.rs          — ATR 14 (Wilder smoothing)
+│   │   ├── vwap.rs         — VWAP (session-cumulative)
+│   │   ├── volume.rs       — VolumeSma 20 (rolling window)
+│   │   └── snapshot.rs     — IndicatorSnapshot + IndicatorEngine
 │   ├── config/             — ResearchConfig (parsed from TOML, no serde)
-│   ├── data/               — DEPRECATED: use market::OhlcvLoader instead
-│   ├── indicators/         — Phase 3 placeholder (EMA, ATR, VWAP)
 │   ├── strategy/           — Phase 4 placeholder (screened_vwap_scalp)
 │   ├── risk/               — Phase 5 placeholder (sizing + drawdown guards)
 │   ├── execution/          — Phase 6 placeholder (SimExecutor)
-│   ├── research/           — Phase 2 CLI orchestrator
+│   ├── research/           — Research CLI orchestrator
 │   ├── report/             — Phase 7 placeholder (JSON + CSV writers)
 │   ├── journal/            — placeholder (not active)
 │   └── advisor/            — placeholder (not active)
@@ -178,10 +198,10 @@ northflow-crypto-trading-bot/
 # Build
 cargo build --release
 
-# Phase 2 market data summary (needs data/historical/BTCUSDT.csv)
+# Phase 3 research summary (needs data/historical/BTCUSDT.csv for symbol data)
 cargo run -- research --config config/research.toml
 
-# Run all unit tests (Phase 1 + Phase 2)
+# Run all unit tests (Phase 1 + Phase 2 + Phase 3)
 cargo test
 
 # Print help
@@ -191,7 +211,7 @@ cargo run -- help
 ### Example output (with data file present)
 
 ```
-Northflow — Phase 2: Market Data Foundation
+Northflow — Phase 3: Indicators
 
   Timeframe model:
     entry_timeframe        = "1m"  (1m  → entry & execution)
@@ -207,7 +227,13 @@ Data quality issues:   0
 Duplicate timestamps:  0
 Missing gaps:          0
 
-Next: Phase 3 — indicators
+Indicators ready:
+  EMA 8 / 21 / 50 / 200
+  ATR 14 (Wilder smoothing)
+  VWAP (session-cumulative)
+  Volume SMA 20
+
+Next: Phase 4 — strategy engine
 ```
 
 ### Example output (no CSV file)

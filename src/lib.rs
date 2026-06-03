@@ -2,7 +2,8 @@
 //!
 //! Phase 1: core domain types — COMPLETE
 //! Phase 2: market data loader + timeframe builder — COMPLETE
-//! Phase 3+: indicators, strategy, risk, backtest, reports — pending
+//! Phase 3: indicators (EMA 8/21/50/200, ATR 14, VWAP, Volume SMA 20) — COMPLETE
+//! Phase 4+: strategy, risk, backtest, reports — pending
 
 pub mod advisor;
 pub mod config;

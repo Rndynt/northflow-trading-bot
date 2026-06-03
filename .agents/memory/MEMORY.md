@@ -3,3 +3,4 @@
 - [Timeframe builder bucket rule](timeframe-builder-rule.md) — builds 5m/15m directly from 1m only; bucket must have EXACTLY required count (!=, not <); overfilled AND underfilled buckets dropped silently; BTreeMap gives deterministic sorted iteration.
 - [Timestamp normalisation threshold](timestamp-norm.md) — strict i64 only (no f64 fallback); decimal/NaN/inf/negative/zero all rejected; values < 10^12 → seconds × 1000; values ≥ 10^12 kept as milliseconds.
 - [src/data deprecation](data-deprecation.md) — src/data/mod.rs kept on disk but removed from pub mod in lib.rs; active loader is crate::market::OhlcvLoader only.
+- [Phase 3 Indicators design](phase3-indicators.md) — EMA/ATR/VWAP/VolumeSma all use Result API; NorthflowError::ConfigError for period==0, DataError for bad values; ATR uses Wilder warmup (collect N TRs → mean) then ((prev*(N-1))+tr)/N; VWAP zero-vol returns current value not None; IndicatorSnapshot+IndicatorEngine in snapshot.rs; 173 tests pass.
