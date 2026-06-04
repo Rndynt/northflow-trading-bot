@@ -53,6 +53,7 @@ pub struct AttributionReport {
     pub by_exit_reason: Vec<AttributionBucket>,
     pub by_side: Vec<AttributionBucket>,
     pub by_filter: Vec<AttributionBucket>,
+    pub by_strategy: Vec<AttributionBucket>,
 }
 
 // ── AttributionEngine ─────────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ impl AttributionEngine {
                 by_exit_reason: vec![],
                 by_side: vec![],
                 by_filter: vec![],
+                by_strategy: vec![],
             };
         }
 
@@ -136,6 +138,7 @@ impl AttributionEngine {
         let by_exit_reason = Self::bucket_by(trades, |t| t.exit_reason.as_str().to_string());
         let by_side = Self::bucket_by(trades, |t| t.side.as_str().to_string());
         let by_filter = Self::build_filter_buckets(trades);
+        let by_strategy = Self::bucket_by(trades, |t| t.strategy_id.as_str().to_string());
 
         AttributionReport {
             summary,
@@ -143,6 +146,7 @@ impl AttributionEngine {
             by_exit_reason,
             by_side,
             by_filter,
+            by_strategy,
         }
     }
 
@@ -444,5 +448,41 @@ mod tests {
         let mut sorted = filter_keys.clone();
         sorted.sort();
         assert_eq!(filter_keys, sorted, "by_filter must be sorted by key");
+    }
+
+    #[test]
+    fn attribution_by_strategy_groups_v1_or_v2() {
+        let mut v1_trade = win();
+        v1_trade.strategy_id = StrategyId::new("screened_vwap_scalp");
+
+        let mut v2_trade = loss();
+        v2_trade.strategy_id = StrategyId::new("screened_vwap_scalp_v2");
+        v2_trade.trade_id = TradeId::new("TRD-SIG-BT-00000099");
+        v2_trade.signal_id = SignalId::new("SIG-BT-00000099");
+
+        let r = AttributionEngine::build(&[v1_trade, v2_trade]);
+        assert_eq!(r.by_strategy.len(), 2, "two strategy buckets expected");
+
+        let v1_bucket = r
+            .by_strategy
+            .iter()
+            .find(|b| b.key == "screened_vwap_scalp")
+            .expect("v1 bucket must exist");
+        assert_eq!(v1_bucket.trades, 1);
+        assert_eq!(v1_bucket.wins, 1);
+
+        let v2_bucket = r
+            .by_strategy
+            .iter()
+            .find(|b| b.key == "screened_vwap_scalp_v2")
+            .expect("v2 bucket must exist");
+        assert_eq!(v2_bucket.trades, 1);
+        assert_eq!(v2_bucket.losses, 1);
+    }
+
+    #[test]
+    fn attribution_empty_has_empty_by_strategy() {
+        let r = AttributionEngine::build(&[]);
+        assert!(r.by_strategy.is_empty());
     }
 }

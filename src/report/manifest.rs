@@ -77,6 +77,10 @@ impl ManifestWriter {
             ("attribution_by_side", attribution.by_side.len()),
         );
         entries.insert(
+            format!("{dir}/attribution_by_strategy.csv"),
+            ("attribution_by_strategy", attribution.by_strategy.len()),
+        );
+        entries.insert(
             format!("{dir}/attribution_summary.json"),
             ("attribution_summary", 1),
         );
@@ -304,6 +308,16 @@ mod tests {
         let m = make_manifest("reports");
         assert_eq!(m.phase, "phase_7_reports_and_attribution");
         assert_eq!(m.generated_by, "northflow_research");
+    }
+
+    #[test]
+    fn manifest_includes_attribution_by_strategy() {
+        let m = make_manifest("reports");
+        let paths: Vec<&str> = m.files.iter().map(|f| f.path.as_str()).collect();
+        assert!(
+            paths.contains(&"reports/attribution_by_strategy.csv"),
+            "manifest must include attribution_by_strategy.csv; got: {paths:?}"
+        );
     }
 
     #[test]

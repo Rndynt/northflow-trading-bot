@@ -9,6 +9,55 @@ use std::{fs, path::Path};
 
 use crate::core::{NorthflowError, Timeframe};
 
+// ── V2Config ──────────────────────────────────────────────────────────────────
+
+/// Configuration for the screened_vwap_scalp_v2 strategy.
+///
+/// All fields have safe defaults.  Unknown strategy_id must be rejected
+/// by `ResearchConfig::validate_strategy_config()` before use.
+#[derive(Debug, Clone)]
+pub struct V2Config {
+    pub require_strict_confirmation: bool,
+    pub require_ema_ribbon_alignment: bool,
+    pub allow_neutral_confirmation: bool,
+    pub min_expected_reward_bps: f64,
+    pub min_expected_net_edge_bps: f64,
+    pub min_atr_bps: f64,
+    pub max_atr_bps: f64,
+    pub tp_atr_multiple: f64,
+    pub sl_atr_multiple: f64,
+    pub min_volume_ratio: f64,
+    pub vwap_distance_atr_min: f64,
+    pub vwap_distance_atr_max: f64,
+    pub cooldown_bars: u64,
+    pub enable_long: bool,
+    pub enable_short: bool,
+}
+
+impl Default for V2Config {
+    fn default() -> Self {
+        Self {
+            require_strict_confirmation: true,
+            require_ema_ribbon_alignment: true,
+            allow_neutral_confirmation: false,
+            min_expected_reward_bps: 20.0,
+            min_expected_net_edge_bps: 5.0,
+            min_atr_bps: 5.0,
+            max_atr_bps: 150.0,
+            tp_atr_multiple: 2.0,
+            sl_atr_multiple: 1.0,
+            min_volume_ratio: 1.0,
+            vwap_distance_atr_min: 0.0,
+            vwap_distance_atr_max: 2.0,
+            cooldown_bars: 0,
+            enable_long: true,
+            enable_short: true,
+        }
+    }
+}
+
+// ── ResearchConfig ────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone)]
 pub struct ResearchConfig {
     // pairs
@@ -22,6 +71,8 @@ pub struct ResearchConfig {
     // data / output
     pub data_dir: String,
     pub reports_dir: String,
+    // strategy selection
+    pub strategy_id: String,
     // risk
     pub initial_equity: f64,
     pub risk_per_trade_pct: f64,
@@ -41,6 +92,22 @@ pub struct ResearchConfig {
     pub max_bars_held: u32,
     pub min_confidence: u8,
     pub entry_geometry_mode: String,
+    // v2 strategy filters
+    pub v2_require_strict_confirmation: bool,
+    pub v2_require_ema_ribbon_alignment: bool,
+    pub v2_allow_neutral_confirmation: bool,
+    pub v2_min_expected_reward_bps: f64,
+    pub v2_min_expected_net_edge_bps: f64,
+    pub v2_min_atr_bps: f64,
+    pub v2_max_atr_bps: f64,
+    pub v2_tp_atr_multiple: f64,
+    pub v2_sl_atr_multiple: f64,
+    pub v2_min_volume_ratio: f64,
+    pub v2_vwap_distance_atr_min: f64,
+    pub v2_vwap_distance_atr_max: f64,
+    pub v2_cooldown_bars: u64,
+    pub v2_enable_long: bool,
+    pub v2_enable_short: bool,
 }
 
 impl Default for ResearchConfig {
@@ -52,6 +119,7 @@ impl Default for ResearchConfig {
             confirmation_timeframe: "5m".to_string(),
             data_dir: "data/historical".to_string(),
             reports_dir: "reports".to_string(),
+            strategy_id: "screened_vwap_scalp".to_string(),
             initial_equity: 5000.0,
             risk_per_trade_pct: 0.25,
             max_open_positions: 1,
@@ -68,6 +136,21 @@ impl Default for ResearchConfig {
             max_bars_held: 60,
             min_confidence: 65,
             entry_geometry_mode: "preserve_signal_levels".to_string(),
+            v2_require_strict_confirmation: true,
+            v2_require_ema_ribbon_alignment: true,
+            v2_allow_neutral_confirmation: false,
+            v2_min_expected_reward_bps: 20.0,
+            v2_min_expected_net_edge_bps: 5.0,
+            v2_min_atr_bps: 5.0,
+            v2_max_atr_bps: 150.0,
+            v2_tp_atr_multiple: 2.0,
+            v2_sl_atr_multiple: 1.0,
+            v2_min_volume_ratio: 1.0,
+            v2_vwap_distance_atr_min: 0.0,
+            v2_vwap_distance_atr_max: 2.0,
+            v2_cooldown_bars: 0,
+            v2_enable_long: true,
+            v2_enable_short: true,
         }
     }
 }
@@ -98,6 +181,8 @@ impl ResearchConfig {
                 "confirmation_timeframe" => cfg.confirmation_timeframe = value.to_string(),
                 "data_dir" => cfg.data_dir = value.to_string(),
                 "reports_dir" => cfg.reports_dir = value.to_string(),
+                // Accept both "strategy_id" and legacy "active" key.
+                "strategy_id" | "active" => cfg.strategy_id = value.to_string(),
                 "initial_equity_usd" => cfg.initial_equity = parse_f64(value, cfg.initial_equity),
                 "risk_per_trade_pct" => {
                     cfg.risk_per_trade_pct = parse_f64(value, cfg.risk_per_trade_pct)
@@ -126,10 +211,146 @@ impl ResearchConfig {
                     cfg.min_confidence = value.parse().unwrap_or(cfg.min_confidence)
                 }
                 "entry_geometry_mode" => cfg.entry_geometry_mode = value.to_string(),
+                // V2 filters
+                "v2_require_strict_confirmation" => {
+                    cfg.v2_require_strict_confirmation = value == "true"
+                }
+                "v2_require_ema_ribbon_alignment" => {
+                    cfg.v2_require_ema_ribbon_alignment = value == "true"
+                }
+                "v2_allow_neutral_confirmation" => {
+                    cfg.v2_allow_neutral_confirmation = value == "true"
+                }
+                "v2_min_expected_reward_bps" => {
+                    cfg.v2_min_expected_reward_bps =
+                        parse_f64(value, cfg.v2_min_expected_reward_bps)
+                }
+                "v2_min_expected_net_edge_bps" => {
+                    cfg.v2_min_expected_net_edge_bps =
+                        parse_f64(value, cfg.v2_min_expected_net_edge_bps)
+                }
+                "v2_min_atr_bps" => {
+                    cfg.v2_min_atr_bps = parse_f64(value, cfg.v2_min_atr_bps)
+                }
+                "v2_max_atr_bps" => {
+                    cfg.v2_max_atr_bps = parse_f64(value, cfg.v2_max_atr_bps)
+                }
+                "v2_tp_atr_multiple" => {
+                    cfg.v2_tp_atr_multiple = parse_f64(value, cfg.v2_tp_atr_multiple)
+                }
+                "v2_sl_atr_multiple" => {
+                    cfg.v2_sl_atr_multiple = parse_f64(value, cfg.v2_sl_atr_multiple)
+                }
+                "v2_min_volume_ratio" => {
+                    cfg.v2_min_volume_ratio = parse_f64(value, cfg.v2_min_volume_ratio)
+                }
+                "v2_vwap_distance_atr_min" => {
+                    cfg.v2_vwap_distance_atr_min =
+                        parse_f64(value, cfg.v2_vwap_distance_atr_min)
+                }
+                "v2_vwap_distance_atr_max" => {
+                    cfg.v2_vwap_distance_atr_max =
+                        parse_f64(value, cfg.v2_vwap_distance_atr_max)
+                }
+                "v2_cooldown_bars" => {
+                    cfg.v2_cooldown_bars = value.parse().unwrap_or(cfg.v2_cooldown_bars)
+                }
+                "v2_enable_long" => cfg.v2_enable_long = value == "true",
+                "v2_enable_short" => cfg.v2_enable_short = value == "true",
                 _ => {}
             }
         }
         cfg
+    }
+
+    /// Extract a `V2Config` from the v2_* fields of this `ResearchConfig`.
+    pub fn v2_config(&self) -> V2Config {
+        V2Config {
+            require_strict_confirmation: self.v2_require_strict_confirmation,
+            require_ema_ribbon_alignment: self.v2_require_ema_ribbon_alignment,
+            allow_neutral_confirmation: self.v2_allow_neutral_confirmation,
+            min_expected_reward_bps: self.v2_min_expected_reward_bps,
+            min_expected_net_edge_bps: self.v2_min_expected_net_edge_bps,
+            min_atr_bps: self.v2_min_atr_bps,
+            max_atr_bps: self.v2_max_atr_bps,
+            tp_atr_multiple: self.v2_tp_atr_multiple,
+            sl_atr_multiple: self.v2_sl_atr_multiple,
+            min_volume_ratio: self.v2_min_volume_ratio,
+            vwap_distance_atr_min: self.v2_vwap_distance_atr_min,
+            vwap_distance_atr_max: self.v2_vwap_distance_atr_max,
+            cooldown_bars: self.v2_cooldown_bars,
+            enable_long: self.v2_enable_long,
+            enable_short: self.v2_enable_short,
+        }
+    }
+
+    /// Validate strategy_id and v2 numeric config.
+    ///
+    /// Returns `Err` for unknown strategy_id or invalid v2 numeric values.
+    /// Must be called before the backtest engine uses the strategy.
+    pub fn validate_strategy_config(&self) -> Result<(), NorthflowError> {
+        match self.strategy_id.as_str() {
+            "screened_vwap_scalp" | "screened_vwap_scalp_v2" => {}
+            other => {
+                return Err(NorthflowError::ConfigError(format!(
+                    "unknown strategy_id: '{other}'. \
+                     Valid values: 'screened_vwap_scalp', 'screened_vwap_scalp_v2'"
+                )))
+            }
+        }
+
+        if !self.v2_tp_atr_multiple.is_finite() || self.v2_tp_atr_multiple <= 0.0 {
+            return Err(NorthflowError::ConfigError(
+                "v2_tp_atr_multiple must be finite and > 0".to_string(),
+            ));
+        }
+        if !self.v2_sl_atr_multiple.is_finite() || self.v2_sl_atr_multiple <= 0.0 {
+            return Err(NorthflowError::ConfigError(
+                "v2_sl_atr_multiple must be finite and > 0".to_string(),
+            ));
+        }
+        if !self.v2_min_expected_reward_bps.is_finite() || self.v2_min_expected_reward_bps < 0.0 {
+            return Err(NorthflowError::ConfigError(
+                "v2_min_expected_reward_bps must be finite and >= 0".to_string(),
+            ));
+        }
+        if !self.v2_min_expected_net_edge_bps.is_finite()
+            || self.v2_min_expected_net_edge_bps < 0.0
+        {
+            return Err(NorthflowError::ConfigError(
+                "v2_min_expected_net_edge_bps must be finite and >= 0".to_string(),
+            ));
+        }
+        if !self.v2_min_atr_bps.is_finite() || self.v2_min_atr_bps < 0.0 {
+            return Err(NorthflowError::ConfigError(
+                "v2_min_atr_bps must be finite and >= 0".to_string(),
+            ));
+        }
+        if !self.v2_max_atr_bps.is_finite() || self.v2_max_atr_bps <= self.v2_min_atr_bps {
+            return Err(NorthflowError::ConfigError(
+                "v2_max_atr_bps must be finite and > v2_min_atr_bps".to_string(),
+            ));
+        }
+        if !self.v2_min_volume_ratio.is_finite() || self.v2_min_volume_ratio < 0.0 {
+            return Err(NorthflowError::ConfigError(
+                "v2_min_volume_ratio must be finite and >= 0".to_string(),
+            ));
+        }
+        if !self.v2_vwap_distance_atr_min.is_finite() || self.v2_vwap_distance_atr_min < 0.0 {
+            return Err(NorthflowError::ConfigError(
+                "v2_vwap_distance_atr_min must be finite and >= 0".to_string(),
+            ));
+        }
+        if !self.v2_vwap_distance_atr_max.is_finite()
+            || self.v2_vwap_distance_atr_max < self.v2_vwap_distance_atr_min
+        {
+            return Err(NorthflowError::ConfigError(
+                "v2_vwap_distance_atr_max must be finite and >= v2_vwap_distance_atr_min"
+                    .to_string(),
+            ));
+        }
+
+        Ok(())
     }
 
     /// Build a RiskConfig from this ResearchConfig.
@@ -251,7 +472,7 @@ mod tests {
     #[test]
     fn wrong_entry_timeframe_role_fails() {
         let mut cfg = default_cfg();
-        cfg.entry_timeframe = "15m".to_string(); // wrong: entry must be 1m
+        cfg.entry_timeframe = "15m".to_string();
         let err = cfg.validate_timeframes().unwrap_err();
         let msg = err.to_string();
         assert!(
@@ -263,7 +484,7 @@ mod tests {
     #[test]
     fn wrong_screening_timeframe_role_fails() {
         let mut cfg = default_cfg();
-        cfg.screening_timeframe = "1m".to_string(); // wrong: screening must be 15m
+        cfg.screening_timeframe = "1m".to_string();
         let err = cfg.validate_timeframes().unwrap_err();
         let msg = err.to_string();
         assert!(
@@ -275,7 +496,7 @@ mod tests {
     #[test]
     fn wrong_confirmation_timeframe_role_fails() {
         let mut cfg = default_cfg();
-        cfg.confirmation_timeframe = "1h".to_string(); // wrong: confirmation must be 5m
+        cfg.confirmation_timeframe = "1h".to_string();
         assert!(cfg.validate_timeframes().is_err());
     }
 
@@ -297,5 +518,84 @@ mod tests {
         let cfg = ResearchConfig::default();
         let cost = cfg.cost_model_config();
         assert!((cost.stop_slippage_bps - cfg.stop_slippage_bps).abs() < 1e-9);
+    }
+
+    // ── Strategy config tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn parses_strategy_id_v1() {
+        let toml = "[strategy]\nstrategy_id = \"screened_vwap_scalp\"\n";
+        let cfg = ResearchConfig::parse(toml);
+        assert_eq!(cfg.strategy_id, "screened_vwap_scalp");
+        assert!(cfg.validate_strategy_config().is_ok());
+    }
+
+    #[test]
+    fn parses_strategy_id_v2() {
+        let toml = "[strategy]\nstrategy_id = \"screened_vwap_scalp_v2\"\n";
+        let cfg = ResearchConfig::parse(toml);
+        assert_eq!(cfg.strategy_id, "screened_vwap_scalp_v2");
+        assert!(cfg.validate_strategy_config().is_ok());
+    }
+
+    #[test]
+    fn rejects_unknown_strategy_id() {
+        let mut cfg = default_cfg();
+        cfg.strategy_id = "bad_strategy_xyz".to_string();
+        let err = cfg.validate_strategy_config().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("bad_strategy_xyz"),
+            "error must mention the bad id: {msg}"
+        );
+    }
+
+    #[test]
+    fn v2_defaults_are_safe() {
+        let cfg = default_cfg();
+        assert!(cfg.validate_strategy_config().is_ok());
+        let v2 = cfg.v2_config();
+        assert!(v2.tp_atr_multiple > 0.0);
+        assert!(v2.sl_atr_multiple > 0.0);
+        assert!(v2.max_atr_bps > v2.min_atr_bps);
+        assert!(v2.vwap_distance_atr_max >= v2.vwap_distance_atr_min);
+    }
+
+    #[test]
+    fn parses_v2_tp_sl_multipliers() {
+        let toml =
+            "[strategy]\nstrategy_id = \"screened_vwap_scalp_v2\"\nv2_tp_atr_multiple = 2.5\nv2_sl_atr_multiple = 1.0\n";
+        let cfg = ResearchConfig::parse(toml);
+        assert!((cfg.v2_tp_atr_multiple - 2.5).abs() < 1e-9);
+        assert!((cfg.v2_sl_atr_multiple - 1.0).abs() < 1e-9);
+        assert!(cfg.validate_strategy_config().is_ok());
+    }
+
+    #[test]
+    fn rejects_invalid_v2_tp_multiplier() {
+        let mut cfg = default_cfg();
+        cfg.v2_tp_atr_multiple = 0.0;
+        assert!(cfg.validate_strategy_config().is_err());
+
+        cfg.v2_tp_atr_multiple = -1.0;
+        assert!(cfg.validate_strategy_config().is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_v2_atr_range() {
+        let mut cfg = default_cfg();
+        cfg.v2_min_atr_bps = 100.0;
+        cfg.v2_max_atr_bps = 50.0;
+        let err = cfg.validate_strategy_config().unwrap_err();
+        assert!(err.to_string().contains("v2_max_atr_bps"));
+    }
+
+    #[test]
+    fn rejects_invalid_v2_vwap_distance_range() {
+        let mut cfg = default_cfg();
+        cfg.v2_vwap_distance_atr_min = 3.0;
+        cfg.v2_vwap_distance_atr_max = 1.0;
+        let err = cfg.validate_strategy_config().unwrap_err();
+        assert!(err.to_string().contains("v2_vwap_distance_atr_max"));
     }
 }

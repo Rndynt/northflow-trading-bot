@@ -38,7 +38,29 @@ use crate::core::{
 use crate::indicators::{IndicatorEngine, IndicatorSnapshot};
 use crate::market::{CandleStore, OhlcvLoader};
 use crate::risk::{CostModelConfig, RiskContext, RiskEngine};
-use crate::strategy::{MultiTimeframeInput, ScreenedVwapScalp, Strategy, StrategyContext};
+use crate::strategy::{
+    MultiTimeframeInput, ScreenedVwapScalp, ScreenedVwapScalpV2, Strategy, StrategyContext,
+};
+
+// ── ActiveStrategy ────────────────────────────────────────────────────────────
+
+enum ActiveStrategy {
+    V1(ScreenedVwapScalp),
+    V2(ScreenedVwapScalpV2),
+}
+
+impl ActiveStrategy {
+    fn evaluate(
+        &self,
+        ctx: &StrategyContext,
+        input: &MultiTimeframeInput,
+    ) -> Result<Option<crate::core::Signal>, crate::core::NorthflowError> {
+        match self {
+            Self::V1(s) => s.evaluate(ctx, input),
+            Self::V2(s) => s.evaluate(ctx, input),
+        }
+    }
+}
 
 // ── BacktestConfig ────────────────────────────────────────────────────────────
 
@@ -75,6 +97,10 @@ impl BacktestEngine {
         cfg: &ResearchConfig,
         symbol: &str,
     ) -> Result<Option<BacktestResult>, NorthflowError> {
+        // Validate strategy config before any data loading so unknown strategy_id
+        // always returns Err, regardless of CSV presence.
+        cfg.validate_strategy_config()?;
+
         let csv_path = Path::new(&cfg.data_dir).join(format!("{symbol}.csv"));
 
         if !csv_path.exists() {
@@ -160,7 +186,20 @@ impl BacktestEngine {
         let mut risk_rejections: Vec<RiskRejection> = Vec::new();
         let mut signal_flow = SignalFlowSummary::default();
 
-        let strategy = ScreenedVwapScalp::default();
+        // Build strategy from config.
+        let strategy = match cfg.strategy_id.as_str() {
+            "screened_vwap_scalp" => ActiveStrategy::V1(ScreenedVwapScalp::default()),
+            "screened_vwap_scalp_v2" => {
+                ActiveStrategy::V2(ScreenedVwapScalpV2::new(cfg.v2_config()))
+            }
+            other => {
+                return Err(NorthflowError::ConfigError(format!(
+                    "unknown strategy_id: '{other}'"
+                )))
+            }
+        };
+        let cooldown_bars = cfg.v2_cooldown_bars as usize;
+        let mut last_signal_bar: Option<usize> = None;
         let mut eng_1m = IndicatorEngine::new_default()?;
 
         let one_minute = &store.one_minute;
@@ -342,7 +381,12 @@ impl BacktestEngine {
             // Skipped on the candle where an entry was just opened to avoid
             // evaluating a new signal before the just-opened trade has had a
             // chance to develop.
-            if !entered_this_bar && open_position.is_none() && equity > 0.0 {
+            // Cooldown: if v2_cooldown_bars > 0, skip strategy evaluation for
+            // that many bars after the last signal was preapproved.
+            let in_cooldown = cooldown_bars > 0
+                && last_signal_bar
+                    .map_or(false, |last| i.saturating_sub(last) <= cooldown_bars);
+            if !entered_this_bar && open_position.is_none() && equity > 0.0 && !in_cooldown {
                 // No-lookahead rule:
                 //   signal_time = candle.timestamp + 60_000
                 //   5m available: 5m_ts + 300_000 <= signal_time → 5m_ts <= candle.ts - 240_000
@@ -409,6 +453,7 @@ impl BacktestEngine {
                                 }
                                 Ok(_) => {
                                     signal_flow.signals_preapproved += 1;
+                                    last_signal_bar = Some(i);
                                     pending_entry = Some(signal);
                                 }
                             }
@@ -699,6 +744,81 @@ mod tests {
         let result = BacktestEngine::run(&cfg, "NONEXISTENT_SYMBOL_XYZ");
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn unknown_strategy_id_returns_config_error() {
+        let mut cfg = default_cfg();
+        cfg.strategy_id = "bad_strategy_xyz".to_string();
+        // validate_strategy_config runs before CSV check, so non-existent CSV is fine.
+        let result = BacktestEngine::run(&cfg, "NONEXISTENT_SYMBOL_XYZ");
+        assert!(result.is_err(), "expected Err for unknown strategy_id");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("bad_strategy_xyz") || msg.contains("unknown"),
+            "error must mention the bad id: {msg}"
+        );
+    }
+
+    #[test]
+    fn backtest_selects_v1_from_config() {
+        let dir = "/tmp";
+        let sym = format!("nf_v1sel_{}", std::process::id());
+        let path = format!("{dir}/{sym}.csv");
+        write_test_csv(&path, 250, 1_700_000_000_000);
+
+        let mut cfg = default_cfg();
+        cfg.data_dir = dir.to_string();
+        cfg.strategy_id = "screened_vwap_scalp".to_string();
+
+        let result = BacktestEngine::run(&cfg, &sym);
+        assert!(result.is_ok(), "v1 strategy must not return Err");
+        assert!(result.unwrap().is_some(), "expected Some for valid CSV");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn backtest_selects_v2_from_config() {
+        let dir = "/tmp";
+        let sym = format!("nf_v2sel_{}", std::process::id());
+        let path = format!("{dir}/{sym}.csv");
+        write_test_csv(&path, 250, 1_700_000_000_000);
+
+        let mut cfg = default_cfg();
+        cfg.data_dir = dir.to_string();
+        cfg.strategy_id = "screened_vwap_scalp_v2".to_string();
+
+        let result = BacktestEngine::run(&cfg, &sym);
+        assert!(result.is_ok(), "v2 strategy must not return Err: {result:?}");
+        assert!(result.unwrap().is_some(), "expected Some for valid CSV");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn v2_trade_reports_strategy_id() {
+        let dir = "/tmp";
+        let sym = format!("nf_v2sid_{}", std::process::id());
+        let path = format!("{dir}/{sym}.csv");
+        write_test_csv(&path, 250, 1_700_000_000_000);
+
+        let mut cfg = default_cfg();
+        cfg.data_dir = dir.to_string();
+        cfg.strategy_id = "screened_vwap_scalp_v2".to_string();
+
+        let result = BacktestEngine::run(&cfg, &sym)
+            .expect("v2 must not error")
+            .expect("must return Some for valid CSV");
+
+        // Any trades generated must have the v2 strategy_id.
+        for trade in &result.trades {
+            assert_eq!(
+                trade.strategy_id.as_str(),
+                "screened_vwap_scalp_v2",
+                "trade strategy_id must match active strategy"
+            );
+        }
+
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]

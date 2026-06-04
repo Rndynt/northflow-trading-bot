@@ -1,7 +1,10 @@
 //! Strategy engine — Phase 4.
 //!
-//! Active strategy: screened_vwap_scalp
-//!   Emits Signal only. No orders, no risk sizing, no backtest execution.
+//! Active strategies:
+//!   screened_vwap_scalp    — original deterministic strategy
+//!   screened_vwap_scalp_v2 — stricter, cost-aware research variant
+//!
+//! Emits Signal only. No orders, no risk sizing, no backtest execution.
 //!
 //! Timeframe roles (explicit — never inferred from array order):
 //!   entry_timeframe        = "1m"   (entry and execution)
@@ -15,8 +18,10 @@
 
 pub mod regime;
 pub mod screened_vwap_scalp;
+pub mod screened_vwap_scalp_v2;
 pub mod traits;
 
 pub use regime::{MarketRegime, classify_screening_regime};
 pub use screened_vwap_scalp::ScreenedVwapScalp;
+pub use screened_vwap_scalp_v2::ScreenedVwapScalpV2;
 pub use traits::{MultiTimeframeInput, Strategy, StrategyContext};

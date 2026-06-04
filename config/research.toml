@@ -9,8 +9,25 @@ screening_timeframe = "15m"
 confirmation_timeframe = "5m"
 
 [strategy]
-active = "screened_vwap_scalp"
+strategy_id = "screened_vwap_scalp_v2"
 min_confidence = 65
+
+# V2 filters — only used when strategy_id = "screened_vwap_scalp_v2"
+v2_require_strict_confirmation = true
+v2_require_ema_ribbon_alignment = true
+v2_allow_neutral_confirmation = false
+v2_min_expected_reward_bps = 25.0
+v2_min_expected_net_edge_bps = 10.0
+v2_min_atr_bps = 8.0
+v2_max_atr_bps = 120.0
+v2_tp_atr_multiple = 2.5
+v2_sl_atr_multiple = 1.0
+v2_min_volume_ratio = 1.0
+v2_vwap_distance_atr_min = 0.0
+v2_vwap_distance_atr_max = 1.5
+v2_cooldown_bars = 5
+v2_enable_long = true
+v2_enable_short = true
 
 [risk]
 initial_equity_usd = 5000.0
@@ -30,9 +47,7 @@ stop_slippage_bps = 5.0
 
 [backtest]
 data_dir = "data/historical"
-# reports_dir = "reports"
-reports_dir = "reports/reanchor"
+reports_dir = "reports/v2_reanchor"
 conservative_intrabar = true
 max_bars_held = 60
-# entry_geometry_mode = "preserve_signal_levels"
 entry_geometry_mode = "reanchor_to_actual_entry"
