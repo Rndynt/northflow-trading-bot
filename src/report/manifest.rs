@@ -84,7 +84,10 @@ impl ManifestWriter {
         entries.insert(format!("{dir}/backtest_summary.json"), ("summary", 1));
         entries.insert(
             format!("{dir}/cost_edge_distribution.csv"),
-            ("cost_edge_distribution", diagnostic.cost_edge_distribution.buckets.len()),
+            (
+                "cost_edge_distribution",
+                diagnostic.cost_edge_distribution.buckets.len(),
+            ),
         );
         entries.insert(
             format!("{dir}/equity_curve.csv"),

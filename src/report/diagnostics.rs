@@ -14,8 +14,8 @@ use std::fs;
 use std::path::Path;
 
 use crate::backtest::risk_trace::{RiskRejection, SignalFlowSummary};
-use crate::core::{NorthflowError, Trade};
 use crate::core::trade::TradeExitReason;
+use crate::core::{NorthflowError, Trade};
 use crate::report::{csv_escape, json_str};
 
 // ── Month key helper ──────────────────────────────────────────────────────────
@@ -50,7 +50,11 @@ fn entry_notional(t: &Trade) -> f64 {
 
 #[inline]
 fn bps_of(value: f64, notional: f64) -> f64 {
-    if notional > 0.0 { value / notional * 10_000.0 } else { 0.0 }
+    if notional > 0.0 {
+        value / notional * 10_000.0
+    } else {
+        0.0
+    }
 }
 
 // ── MonthlySummaryRow ─────────────────────────────────────────────────────────
@@ -255,7 +259,11 @@ impl DiagnosticEngine {
 
             let losses = count - wins;
             let n = count as f64;
-            let win_rate = if count > 0 { wins as f64 / n * 100.0 } else { 0.0 };
+            let win_rate = if count > 0 {
+                wins as f64 / n * 100.0
+            } else {
+                0.0
+            };
 
             let (profit_factor, profit_factor_inf) =
                 if gross_losers.abs() < 1e-12 && gross_winners > 0.0 {
@@ -266,7 +274,11 @@ impl DiagnosticEngine {
                     (gross_winners / gross_losers.abs(), false)
                 };
 
-            let avg_win = if wins > 0 { win_net_pnl / wins as f64 } else { 0.0 };
+            let avg_win = if wins > 0 {
+                win_net_pnl / wins as f64
+            } else {
+                0.0
+            };
             let avg_loss = if losses > 0 {
                 loss_net_pnl / losses as f64
             } else {
@@ -295,7 +307,11 @@ impl DiagnosticEngine {
             let avg_exp = if count > 0 { exp_edge_sum / n } else { 0.0 };
             let avg_act = if count > 0 { act_edge_sum / n } else { 0.0 };
             let avg_edge_real = avg_act - avg_exp;
-            let avg_cost_bps = if count > 0 { total_cost_bps_sum / n } else { 0.0 };
+            let avg_cost_bps = if count > 0 {
+                total_cost_bps_sum / n
+            } else {
+                0.0
+            };
 
             rows.push(MonthlySummaryRow {
                 month: month.clone(),
@@ -491,26 +507,14 @@ impl DiagnosticEngine {
                     wins: acc.wins,
                     losses: acc.losses,
                     win_rate,
-                    avg_expected_edge_bps: if count > 0 {
-                        acc.exp_edge_sum / n
-                    } else {
-                        0.0
-                    },
-                    avg_actual_edge_bps: if count > 0 {
-                        acc.act_edge_sum / n
-                    } else {
-                        0.0
-                    },
+                    avg_expected_edge_bps: if count > 0 { acc.exp_edge_sum / n } else { 0.0 },
+                    avg_actual_edge_bps: if count > 0 { acc.act_edge_sum / n } else { 0.0 },
                     avg_edge_realization_bps: if count > 0 {
                         (acc.act_edge_sum - acc.exp_edge_sum) / n
                     } else {
                         0.0
                     },
-                    avg_total_cost_bps: if count > 0 {
-                        acc.cost_bps_sum / n
-                    } else {
-                        0.0
-                    },
+                    avg_total_cost_bps: if count > 0 { acc.cost_bps_sum / n } else { 0.0 },
                     avg_net_pnl_bps: if count > 0 {
                         acc.net_pnl_bps_sum / n
                     } else {
@@ -555,7 +559,11 @@ impl DiagnosticEngine {
 
         let losing_trades = total - wins;
         let n = total as f64;
-        let win_rate = if total > 0 { wins as f64 / n * 100.0 } else { 0.0 };
+        let win_rate = if total > 0 {
+            wins as f64 / n * 100.0
+        } else {
+            0.0
+        };
         let total_cost = fee + slippage;
         let net_pnl = gross_pnl - total_cost;
 
@@ -614,15 +622,10 @@ pub struct DiagnosticWriter;
 
 impl DiagnosticWriter {
     /// Write all 5 diagnostic files to `reports_dir`.
-    pub fn write_all(
-        reports_dir: &str,
-        report: &DiagnosticReport,
-    ) -> Result<(), NorthflowError> {
+    pub fn write_all(reports_dir: &str, report: &DiagnosticReport) -> Result<(), NorthflowError> {
         let dir = Path::new(reports_dir);
         fs::create_dir_all(dir).map_err(|e| {
-            NorthflowError::DataError(format!(
-                "cannot create reports dir '{reports_dir}': {e}"
-            ))
+            NorthflowError::DataError(format!("cannot create reports dir '{reports_dir}': {e}"))
         })?;
 
         Self::write_signal_diagnostics(dir, &report.trade_distribution, report)?;
@@ -666,7 +669,9 @@ impl DiagnosticWriter {
         dir: &Path,
         rows: &[RejectionByStageReasonRow],
     ) -> Result<(), NorthflowError> {
-        let mut out = String::from("stage,entry_geometry_mode,reason,count,unique_signals,avg_equity,avg_drawdown_pct,avg_daily_realized_pnl,avg_expected_reward_bps,avg_expected_cost_bps,avg_expected_net_edge_bps,min_expected_net_edge_bps,max_expected_net_edge_bps\n");
+        let mut out = String::from(
+            "stage,entry_geometry_mode,reason,count,unique_signals,avg_equity,avg_drawdown_pct,avg_daily_realized_pnl,avg_expected_reward_bps,avg_expected_cost_bps,avg_expected_net_edge_bps,min_expected_net_edge_bps,max_expected_net_edge_bps\n",
+        );
         for r in rows {
             out.push_str(&format!(
                 "{},{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
@@ -690,11 +695,10 @@ impl DiagnosticWriter {
             .map_err(|e| NorthflowError::DataError(format!("cannot write {}: {e}", path.display())))
     }
 
-    fn write_monthly_summary(
-        dir: &Path,
-        rows: &[MonthlySummaryRow],
-    ) -> Result<(), NorthflowError> {
-        let mut out = String::from("month,trades,wins,losses,win_rate,gross_pnl,fee,slippage,total_cost,net_pnl,profit_factor,avg_win,avg_loss,expectancy,max_consecutive_losses,avg_reward_risk,avg_expected_edge_bps,avg_actual_edge_bps,avg_edge_realization_bps,avg_total_cost_bps,take_profit_count,stop_loss_count,time_exit_count,end_of_backtest_count\n");
+    fn write_monthly_summary(dir: &Path, rows: &[MonthlySummaryRow]) -> Result<(), NorthflowError> {
+        let mut out = String::from(
+            "month,trades,wins,losses,win_rate,gross_pnl,fee,slippage,total_cost,net_pnl,profit_factor,avg_win,avg_loss,expectancy,max_consecutive_losses,avg_reward_risk,avg_expected_edge_bps,avg_actual_edge_bps,avg_edge_realization_bps,avg_total_cost_bps,take_profit_count,stop_loss_count,time_exit_count,end_of_backtest_count\n",
+        );
         for r in rows {
             let pf_str = if r.profit_factor_inf {
                 "inf".to_string()
@@ -738,7 +742,9 @@ impl DiagnosticWriter {
         dir: &Path,
         dist: &CostEdgeDistribution,
     ) -> Result<(), NorthflowError> {
-        let mut out = String::from("bucket,trades,wins,losses,win_rate,avg_expected_edge_bps,avg_actual_edge_bps,avg_edge_realization_bps,avg_total_cost_bps,avg_net_pnl_bps,net_pnl\n");
+        let mut out = String::from(
+            "bucket,trades,wins,losses,win_rate,avg_expected_edge_bps,avg_actual_edge_bps,avg_edge_realization_bps,avg_total_cost_bps,avg_net_pnl_bps,net_pnl\n",
+        );
         for r in &dist.buckets {
             out.push_str(&format!(
                 "{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
@@ -832,9 +838,7 @@ impl DiagnosticWriter {
     ) -> Result<(), NorthflowError> {
         let dir = Path::new(reports_dir);
         fs::create_dir_all(dir).map_err(|e| {
-            NorthflowError::DataError(format!(
-                "cannot create reports dir '{reports_dir}': {e}"
-            ))
+            NorthflowError::DataError(format!("cannot create reports dir '{reports_dir}': {e}"))
         })?;
 
         Self::write_signal_diagnostics_rows(dir, trades)?;
@@ -977,7 +981,11 @@ mod tests {
     }
 
     fn simple_trade(n: u32, entry_time: i64, net_pnl: f64, edge: f64) -> Trade {
-        let gross = if net_pnl > 0.0 { net_pnl + 8.0 } else { net_pnl + 8.0 };
+        let gross = if net_pnl > 0.0 {
+            net_pnl + 8.0
+        } else {
+            net_pnl + 8.0
+        };
         make_trade(
             n,
             entry_time,
@@ -1073,7 +1081,10 @@ mod tests {
         let fields: Vec<&str> = data_line.split(',').collect();
         // total_cost is field index 18 (0-based)
         let total_cost: f64 = fields[18].parse().unwrap();
-        assert!((total_cost - 8.0).abs() < 1e-6, "total_cost should be 8.0, got {total_cost}");
+        assert!(
+            (total_cost - 8.0).abs() < 1e-6,
+            "total_cost should be 8.0, got {total_cost}"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1102,7 +1113,10 @@ mod tests {
         let fields: Vec<&str> = data_line.split(',').collect();
         // total_cost_bps is at field index 28
         let cost_bps: f64 = fields[28].parse().unwrap();
-        assert!((cost_bps - 20.0).abs() < 1e-4, "cost_bps should be 20.0, got {cost_bps}");
+        assert!(
+            (cost_bps - 20.0).abs() < 1e-4,
+            "cost_bps should be 20.0, got {cost_bps}"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1131,7 +1145,10 @@ mod tests {
         let fields: Vec<&str> = data_line.split(',').collect();
         // edge_realization_bps is at field index 25
         let edge_real: f64 = fields[25].parse().unwrap();
-        assert!((edge_real - (-5.0)).abs() < 1e-4, "edge_real should be -5.0, got {edge_real}");
+        assert!(
+            (edge_real - (-5.0)).abs() < 1e-4,
+            "edge_real should be -5.0, got {edge_real}"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1176,25 +1193,55 @@ mod tests {
     #[test]
     fn rejection_by_stage_reason_groups_by_stage_mode_reason() {
         let rejections = vec![
-            make_rejection("expected_net_edge_not_positive", "initial_risk", "preserve_signal_levels"),
-            make_rejection("expected_net_edge_not_positive", "initial_risk", "preserve_signal_levels"),
-            make_rejection("reward_risk_below_minimum", "initial_risk", "preserve_signal_levels"),
+            make_rejection(
+                "expected_net_edge_not_positive",
+                "initial_risk",
+                "preserve_signal_levels",
+            ),
+            make_rejection(
+                "expected_net_edge_not_positive",
+                "initial_risk",
+                "preserve_signal_levels",
+            ),
+            make_rejection(
+                "reward_risk_below_minimum",
+                "initial_risk",
+                "preserve_signal_levels",
+            ),
         ];
         let rows = DiagnosticEngine::build_rejection_groups(&rejections);
         assert_eq!(rows.len(), 2);
-        let edge_row = rows.iter().find(|r| r.reason == "expected_net_edge_not_positive").unwrap();
+        let edge_row = rows
+            .iter()
+            .find(|r| r.reason == "expected_net_edge_not_positive")
+            .unwrap();
         assert_eq!(edge_row.count, 2);
-        let rr_row = rows.iter().find(|r| r.reason == "reward_risk_below_minimum").unwrap();
+        let rr_row = rows
+            .iter()
+            .find(|r| r.reason == "reward_risk_below_minimum")
+            .unwrap();
         assert_eq!(rr_row.count, 1);
     }
 
     #[test]
     fn rejection_by_stage_reason_counts_unique_signals() {
-        let mut r1 = make_rejection("expected_net_edge_not_positive", "initial_risk", "preserve_signal_levels");
+        let mut r1 = make_rejection(
+            "expected_net_edge_not_positive",
+            "initial_risk",
+            "preserve_signal_levels",
+        );
         r1.signal_id = "SIG-01".to_string();
-        let mut r2 = make_rejection("expected_net_edge_not_positive", "initial_risk", "preserve_signal_levels");
+        let mut r2 = make_rejection(
+            "expected_net_edge_not_positive",
+            "initial_risk",
+            "preserve_signal_levels",
+        );
         r2.signal_id = "SIG-01".to_string();
-        let mut r3 = make_rejection("expected_net_edge_not_positive", "initial_risk", "preserve_signal_levels");
+        let mut r3 = make_rejection(
+            "expected_net_edge_not_positive",
+            "initial_risk",
+            "preserve_signal_levels",
+        );
         r3.signal_id = "SIG-02".to_string();
 
         let rows = DiagnosticEngine::build_rejection_groups(&[r1, r2, r3]);
@@ -1203,9 +1250,17 @@ mod tests {
 
     #[test]
     fn rejection_by_stage_reason_averages_cost_and_edge() {
-        let mut r1 = make_rejection("expected_net_edge_not_positive", "initial_risk", "preserve_signal_levels");
+        let mut r1 = make_rejection(
+            "expected_net_edge_not_positive",
+            "initial_risk",
+            "preserve_signal_levels",
+        );
         r1.expected_net_edge_bps = 100.0;
-        let mut r2 = make_rejection("expected_net_edge_not_positive", "initial_risk", "preserve_signal_levels");
+        let mut r2 = make_rejection(
+            "expected_net_edge_not_positive",
+            "initial_risk",
+            "preserve_signal_levels",
+        );
         r2.expected_net_edge_bps = 200.0;
 
         let rows = DiagnosticEngine::build_rejection_groups(&[r1, r2]);
@@ -1219,9 +1274,21 @@ mod tests {
     #[test]
     fn rejection_by_stage_reason_sorts_stably() {
         let rows = DiagnosticEngine::build_rejection_groups(&[
-            make_rejection("reward_risk_below_minimum", "initial_risk", "preserve_signal_levels"),
-            make_rejection("expected_net_edge_not_positive", "actual_entry", "reanchor_to_actual_entry"),
-            make_rejection("max_drawdown_reached", "initial_risk", "preserve_signal_levels"),
+            make_rejection(
+                "reward_risk_below_minimum",
+                "initial_risk",
+                "preserve_signal_levels",
+            ),
+            make_rejection(
+                "expected_net_edge_not_positive",
+                "actual_entry",
+                "reanchor_to_actual_entry",
+            ),
+            make_rejection(
+                "max_drawdown_reached",
+                "initial_risk",
+                "preserve_signal_levels",
+            ),
         ]);
         // Sorted by (stage, mode, reason) ascending
         // actual_entry < initial_risk (alphabetical)
@@ -1281,10 +1348,62 @@ mod tests {
     #[test]
     fn monthly_summary_counts_exit_reasons() {
         let trades = vec![
-            make_trade(1, 1_704_067_200_000, 10.0, 18.0, 5.0, 3.0, 20.0, 15.0, TradeExitReason::TakeProfit, vec![], vec![], "e"),
-            make_trade(2, 1_704_153_600_000, -5.0, -3.0, 5.0, 3.0, 20.0, 5.0, TradeExitReason::StopLoss, vec![], vec![], "e"),
-            make_trade(3, 1_704_240_000_000, -2.0, 0.0, 5.0, 3.0, 20.0, 8.0, TradeExitReason::TimeExit, vec![], vec![], "e"),
-            make_trade(4, 1_704_326_400_000, -1.0, 0.0, 5.0, 3.0, 20.0, 8.0, TradeExitReason::EndOfBacktest, vec![], vec![], "e"),
+            make_trade(
+                1,
+                1_704_067_200_000,
+                10.0,
+                18.0,
+                5.0,
+                3.0,
+                20.0,
+                15.0,
+                TradeExitReason::TakeProfit,
+                vec![],
+                vec![],
+                "e",
+            ),
+            make_trade(
+                2,
+                1_704_153_600_000,
+                -5.0,
+                -3.0,
+                5.0,
+                3.0,
+                20.0,
+                5.0,
+                TradeExitReason::StopLoss,
+                vec![],
+                vec![],
+                "e",
+            ),
+            make_trade(
+                3,
+                1_704_240_000_000,
+                -2.0,
+                0.0,
+                5.0,
+                3.0,
+                20.0,
+                8.0,
+                TradeExitReason::TimeExit,
+                vec![],
+                vec![],
+                "e",
+            ),
+            make_trade(
+                4,
+                1_704_326_400_000,
+                -1.0,
+                0.0,
+                5.0,
+                3.0,
+                20.0,
+                8.0,
+                TradeExitReason::EndOfBacktest,
+                vec![],
+                vec![],
+                "e",
+            ),
         ];
         let rows = DiagnosticEngine::build_monthly(&trades);
         let r = &rows[0];
@@ -1306,9 +1425,9 @@ mod tests {
     #[test]
     fn monthly_summary_sorts_by_month() {
         let trades = vec![
-            simple_trade(1, 1_711_929_600_000, 5.0, 20.0),  // Apr
-            simple_trade(2, 1_704_067_200_000, 5.0, 20.0),  // Jan
-            simple_trade(3, 1_706_745_600_000, 5.0, 20.0),  // Feb
+            simple_trade(1, 1_711_929_600_000, 5.0, 20.0), // Apr
+            simple_trade(2, 1_704_067_200_000, 5.0, 20.0), // Jan
+            simple_trade(3, 1_706_745_600_000, 5.0, 20.0), // Feb
         ];
         let rows = DiagnosticEngine::build_monthly(&trades);
         assert_eq!(rows[0].month, "2024-01");
@@ -1325,7 +1444,16 @@ mod tests {
         let names: Vec<&str> = dist.buckets.iter().map(|b| b.bucket.as_str()).collect();
         assert_eq!(
             names,
-            &["edge_lt_0", "edge_0_5", "edge_5_10", "edge_10_15", "edge_15_20", "edge_20_30", "edge_30_50", "edge_gte_50"]
+            &[
+                "edge_lt_0",
+                "edge_0_5",
+                "edge_5_10",
+                "edge_10_15",
+                "edge_15_20",
+                "edge_20_30",
+                "edge_30_50",
+                "edge_gte_50"
+            ]
         );
     }
 
@@ -1333,7 +1461,11 @@ mod tests {
     fn cost_edge_distribution_assigns_edge_10_15_bucket() {
         let t = simple_trade(1, 1_704_067_200_000, 10.0, 12.0); // edge=12 → bucket edge_10_15
         let dist = DiagnosticEngine::build_cost_edge(&[t]);
-        let bucket = dist.buckets.iter().find(|b| b.bucket == "edge_10_15").unwrap();
+        let bucket = dist
+            .buckets
+            .iter()
+            .find(|b| b.bucket == "edge_10_15")
+            .unwrap();
         assert_eq!(bucket.trades, 1);
         assert_eq!(bucket.wins, 1);
     }
@@ -1342,7 +1474,11 @@ mod tests {
     fn cost_edge_distribution_assigns_edge_gte_50_bucket() {
         let t = simple_trade(1, 1_704_067_200_000, 10.0, 75.0); // edge=75 → gte_50
         let dist = DiagnosticEngine::build_cost_edge(&[t]);
-        let bucket = dist.buckets.iter().find(|b| b.bucket == "edge_gte_50").unwrap();
+        let bucket = dist
+            .buckets
+            .iter()
+            .find(|b| b.bucket == "edge_gte_50")
+            .unwrap();
         assert_eq!(bucket.trades, 1);
     }
 
@@ -1364,7 +1500,11 @@ mod tests {
         );
         // net_pnl=20, notional=4000, net_pnl_bps=50
         let dist = DiagnosticEngine::build_cost_edge(&[t]);
-        let bucket = dist.buckets.iter().find(|b| b.bucket == "edge_20_30").unwrap();
+        let bucket = dist
+            .buckets
+            .iter()
+            .find(|b| b.bucket == "edge_20_30")
+            .unwrap();
         assert!((bucket.avg_net_pnl_bps - 50.0).abs() < 1e-4);
     }
 
@@ -1392,13 +1532,28 @@ mod tests {
     #[test]
     fn trade_distribution_summary_finds_dominant_rejection() {
         let rejections = vec![
-            make_rejection("expected_net_edge_not_positive", "initial_risk", "preserve_signal_levels"),
-            make_rejection("expected_net_edge_not_positive", "initial_risk", "preserve_signal_levels"),
-            make_rejection("reward_risk_below_minimum", "initial_risk", "preserve_signal_levels"),
+            make_rejection(
+                "expected_net_edge_not_positive",
+                "initial_risk",
+                "preserve_signal_levels",
+            ),
+            make_rejection(
+                "expected_net_edge_not_positive",
+                "initial_risk",
+                "preserve_signal_levels",
+            ),
+            make_rejection(
+                "reward_risk_below_minimum",
+                "initial_risk",
+                "preserve_signal_levels",
+            ),
         ];
         let flow = SignalFlowSummary::default();
         let s = DiagnosticEngine::build_trade_distribution(&[], &rejections, &flow);
-        assert_eq!(s.dominant_rejection_reason, "expected_net_edge_not_positive");
+        assert_eq!(
+            s.dominant_rejection_reason,
+            "expected_net_edge_not_positive"
+        );
         assert_eq!(s.dominant_rejection_count, 2);
     }
 
@@ -1421,7 +1576,11 @@ mod tests {
     fn diagnostic_writer_writes_all_files() {
         let dir = tmp_dir("writer_all");
         let t = simple_trade(1, 1_704_067_200_000, 10.0, 20.0);
-        let r = make_rejection("expected_net_edge_not_positive", "initial_risk", "preserve_signal_levels");
+        let r = make_rejection(
+            "expected_net_edge_not_positive",
+            "initial_risk",
+            "preserve_signal_levels",
+        );
         let flow = SignalFlowSummary::default();
         let report = DiagnosticEngine::build(&[t.clone()], &[r], &flow);
         DiagnosticWriter::write_all_with_trades(&dir, &report, &[t]).unwrap();
@@ -1434,7 +1593,8 @@ mod tests {
             "trade_distribution_summary.json",
         ] {
             let path = format!("{dir}/{fname}");
-            let content = std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("{fname} must exist"));
+            let content =
+                std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("{fname} must exist"));
             assert!(!content.is_empty(), "{fname} must not be empty");
         }
         std::fs::remove_dir_all(&dir).ok();
@@ -1442,9 +1602,9 @@ mod tests {
 
     #[test]
     fn manifest_includes_diagnostic_files() {
-        use crate::report::manifest::ManifestWriter;
-        use crate::report::attribution::AttributionEngine;
         use crate::backtest::metrics::EquityPoint;
+        use crate::report::attribution::AttributionEngine;
+        use crate::report::manifest::ManifestWriter;
 
         let flow = SignalFlowSummary::default();
         let t = simple_trade(1, 1_704_067_200_000, 10.0, 20.0);
@@ -1467,9 +1627,9 @@ mod tests {
 
     #[test]
     fn manifest_counts_cost_edge_distribution_as_8_rows() {
-        use crate::report::manifest::ManifestWriter;
-        use crate::report::attribution::AttributionEngine;
         use crate::backtest::metrics::EquityPoint;
+        use crate::report::attribution::AttributionEngine;
+        use crate::report::manifest::ManifestWriter;
 
         let flow = SignalFlowSummary::default();
         let diag = DiagnosticEngine::build(&[], &[], &flow);
@@ -1477,7 +1637,11 @@ mod tests {
         let equity: Vec<EquityPoint> = vec![];
         let m = ManifestWriter::build("reports", &[], &equity, &attr, 0, &diag);
 
-        let ced = m.files.iter().find(|f| f.path.ends_with("cost_edge_distribution.csv")).unwrap();
+        let ced = m
+            .files
+            .iter()
+            .find(|f| f.path.ends_with("cost_edge_distribution.csv"))
+            .unwrap();
         assert_eq!(ced.rows, 8);
     }
 }
