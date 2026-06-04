@@ -47,7 +47,7 @@ stop_slippage_bps = 5.0
 
 [backtest]
 data_dir = "data/historical"
-reports_dir = "reports/v2_reanchor"
+reports_dir = "reports/comparison"
 conservative_intrabar = true
 max_bars_held = 60
 entry_geometry_mode = "reanchor_to_actual_entry"
@@ -60,10 +60,17 @@ entry_geometry_mode = "reanchor_to_actual_entry"
 # multi      — reserved for future shared-account portfolio mode; currently
 #              returns a config error if used
 #
-strategy_run_mode = "single"
-strategies = ["screened_vwap_scalp_v2"]
+
+# Single Mode
+# strategy_run_mode = "single"
+# strategies = ["screened_vwap_scalp_v2"]
+
+# Comparison mode
+strategy_run_mode = "comparison"
+strategies = ["screened_vwap_scalp", "screened_vwap_scalp_v2"]
 
 # To compare strategies, uncomment and switch to comparison mode:
 # strategy_run_mode = "comparison"
 # strategies = ["screened_vwap_scalp", "screened_vwap_scalp_v2"]
 # reports_dir = "reports/comparison"
+
