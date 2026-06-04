@@ -18,6 +18,52 @@ See `docs/ROADMAP.md` for full roadmap and architecture decisions.
 
 ---
 
+## Strategy Comparison Runner
+
+The research pipeline supports three strategy run modes, set via `strategy_run_mode` in `[backtest]`:
+
+| Mode | Description |
+|---|---|
+| `single` | Run one strategy, write reports to `reports_dir` (default) |
+| `comparison` | Run multiple strategies independently in subfolders, write aggregate `comparison_summary.csv` / `.json` |
+| `multi` | Reserved — returns a config error; use `comparison` |
+
+### Single mode (default — fully backwards-compatible)
+
+```toml
+[backtest]
+reports_dir = "reports/v2_run"
+strategy_run_mode = "single"
+strategies = ["screened_vwap_scalp_v2"]
+```
+
+### Comparison mode
+
+```toml
+[backtest]
+reports_dir = "reports/comparison"
+strategy_run_mode = "comparison"
+strategies = ["screened_vwap_scalp", "screened_vwap_scalp_v2"]
+```
+
+Each strategy gets its own isolated subfolder with a full set of Phase 7 reports and independent equity / risk state:
+
+```
+reports/comparison/
+  screened_vwap_scalp/         ← full Phase 7 reports for V1
+  screened_vwap_scalp_v2/      ← full Phase 7 reports for V2
+  comparison_summary.csv       ← one row per strategy
+  comparison_summary.json      ← same data in JSON
+```
+
+For multiple symbols: `reports/comparison/<SYMBOL>/<strategy_id>/`
+
+`comparison_summary.csv` columns include `total_trades`, `win_rate`, `net_pnl`, `profit_factor`, `max_drawdown`, `avg_expected_edge_bps`, `avg_actual_edge_bps`, `avg_edge_realization_bps`, `avg_total_cost_bps`, signal funnel counts, and dominant rejection reason.
+
+See `docs/STRATEGY_RESEARCH.md` for the full column reference and validation rules.
+
+---
+
 ## Phase 7 — Reports and Attribution
 
 Phase 7 is the final research-core phase. Every trade is now explainable and auditable back to its original signal.

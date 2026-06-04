@@ -51,3 +51,19 @@ reports_dir = "reports/v2_reanchor"
 conservative_intrabar = true
 max_bars_held = 60
 entry_geometry_mode = "reanchor_to_actual_entry"
+
+# Strategy runner — controls how many strategies are backtested per run.
+#
+# single     — run exactly one strategy (default, preserves legacy behavior)
+# comparison — run multiple strategies independently, each with its own equity,
+#              risk state, and report subfolder
+# multi      — reserved for future shared-account portfolio mode; currently
+#              returns a config error if used
+#
+strategy_run_mode = "single"
+strategies = ["screened_vwap_scalp_v2"]
+
+# To compare strategies, uncomment and switch to comparison mode:
+# strategy_run_mode = "comparison"
+# strategies = ["screened_vwap_scalp", "screened_vwap_scalp_v2"]
+# reports_dir = "reports/comparison"

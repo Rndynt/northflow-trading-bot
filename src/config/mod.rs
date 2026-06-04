@@ -73,6 +73,9 @@ pub struct ResearchConfig {
     pub reports_dir: String,
     // strategy selection
     pub strategy_id: String,
+    // strategy runner
+    pub strategy_run_mode: String,
+    pub strategies: Vec<String>,
     // risk
     pub initial_equity: f64,
     pub risk_per_trade_pct: f64,
@@ -120,6 +123,8 @@ impl Default for ResearchConfig {
             data_dir: "data/historical".to_string(),
             reports_dir: "reports".to_string(),
             strategy_id: "screened_vwap_scalp".to_string(),
+            strategy_run_mode: "single".to_string(),
+            strategies: vec![],
             initial_equity: 5000.0,
             risk_per_trade_pct: 0.25,
             max_open_positions: 1,
@@ -183,6 +188,9 @@ impl ResearchConfig {
                 "reports_dir" => cfg.reports_dir = value.to_string(),
                 // Accept both "strategy_id" and legacy "active" key.
                 "strategy_id" | "active" => cfg.strategy_id = value.to_string(),
+                // Strategy runner fields.
+                "strategy_run_mode" => cfg.strategy_run_mode = value.to_string(),
+                "strategies" => cfg.strategies = parse_strategies_array(value),
                 "initial_equity_usd" => cfg.initial_equity = parse_f64(value, cfg.initial_equity),
                 "risk_per_trade_pct" => {
                     cfg.risk_per_trade_pct = parse_f64(value, cfg.risk_per_trade_pct)
@@ -346,6 +354,110 @@ impl ResearchConfig {
         Ok(())
     }
 
+    /// Validate strategy runner config: run mode, strategy list, duplicates, reserved modes.
+    ///
+    /// Must be called after `validate_strategy_config()`.
+    pub fn validate_strategy_runner_config(&self) -> Result<(), NorthflowError> {
+        match self.strategy_run_mode.as_str() {
+            "multi" => {
+                return Err(NorthflowError::ConfigError(
+                    "multi-strategy portfolio backtest is not implemented yet; \
+                     use strategy_run_mode = \"comparison\""
+                        .to_string(),
+                ));
+            }
+            "single" | "comparison" => {}
+            other => {
+                return Err(NorthflowError::ConfigError(format!(
+                    "unknown strategy_run_mode: '{other}'. \
+                     Valid values: 'single', 'comparison', 'multi'"
+                )));
+            }
+        }
+
+        // Check for duplicates in strategies list.
+        let mut seen = std::collections::HashSet::new();
+        for s in &self.strategies {
+            if !seen.insert(s.as_str()) {
+                return Err(NorthflowError::ConfigError(format!(
+                    "duplicate strategy in strategies list: '{s}'"
+                )));
+            }
+        }
+
+        // Validate each strategy ID in strategies list.
+        for s in &self.strategies {
+            match s.as_str() {
+                "screened_vwap_scalp" | "screened_vwap_scalp_v2" => {}
+                other => {
+                    return Err(NorthflowError::ConfigError(format!(
+                        "unknown strategy in strategies list: '{other}'. \
+                         Valid values: 'screened_vwap_scalp', 'screened_vwap_scalp_v2'"
+                    )));
+                }
+            }
+        }
+
+        // Single mode: strategies list must have 0 or 1 items.
+        if self.strategy_run_mode == "single" && self.strategies.len() > 1 {
+            return Err(NorthflowError::ConfigError(format!(
+                "strategy_run_mode = 'single' requires at most one strategy in strategies, \
+                 but got {}: [{}]. Use strategy_run_mode = 'comparison' to run multiple strategies.",
+                self.strategies.len(),
+                self.strategies.join(", ")
+            )));
+        }
+
+        // Comparison mode: strategies list must have at least one item.
+        if self.strategy_run_mode == "comparison" && self.strategies.is_empty() {
+            return Err(NorthflowError::ConfigError(
+                "strategy_run_mode = 'comparison' requires at least one strategy \
+                 in strategies list"
+                    .to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Returns the ordered list of strategies to run, based on run mode and fallback rules.
+    ///
+    /// - `single`: returns `[strategies[0]]` if strategies is non-empty, else `[strategy_id]`.
+    /// - `comparison`: returns `strategies.clone()`.
+    /// - `multi`: returns `ConfigError` (not implemented).
+    /// - unknown mode: returns `ConfigError`.
+    pub fn selected_strategies(&self) -> Result<Vec<String>, NorthflowError> {
+        match self.strategy_run_mode.as_str() {
+            "single" => {
+                if self.strategies.is_empty() {
+                    Ok(vec![self.strategy_id.clone()])
+                } else {
+                    Ok(vec![self.strategies[0].clone()])
+                }
+            }
+            "comparison" => Ok(self.strategies.clone()),
+            "multi" => Err(NorthflowError::ConfigError(
+                "multi-strategy portfolio backtest is not implemented yet; \
+                 use strategy_run_mode = \"comparison\""
+                    .to_string(),
+            )),
+            other => Err(NorthflowError::ConfigError(format!(
+                "unknown strategy_run_mode: '{other}'. \
+                 Valid values: 'single', 'comparison', 'multi'"
+            ))),
+        }
+    }
+
+    /// Returns a cloned config with `strategy_id` and `reports_dir` overridden.
+    ///
+    /// Used to run one strategy at a time in comparison mode without mutating the root config.
+    pub fn with_strategy_for_run(&self, strategy_id: &str, reports_dir: String) -> Self {
+        let mut cfg = self.clone();
+        cfg.strategy_id = strategy_id.to_string();
+        cfg.reports_dir = reports_dir;
+        cfg
+    }
+
     /// Build a RiskConfig from this ResearchConfig.
     pub fn risk_config(&self) -> crate::risk::RiskConfig {
         crate::risk::RiskConfig {
@@ -423,6 +535,17 @@ fn parse_string_array(value: &str) -> Vec<String> {
     } else {
         items
     }
+}
+
+/// Parse a TOML-style string array, returning an empty vec when empty.
+/// Unlike `parse_string_array`, does not fall back to a default value.
+fn parse_strategies_array(value: &str) -> Vec<String> {
+    let trimmed = value.trim().trim_start_matches('[').trim_end_matches(']');
+    trimmed
+        .split(',')
+        .map(|s| s.trim().trim_matches('"').to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 fn parse_f64(value: &str, default: f64) -> f64 {
@@ -576,18 +699,175 @@ mod tests {
     #[test]
     fn rejects_invalid_v2_atr_range() {
         let mut cfg = default_cfg();
-        cfg.v2_min_atr_bps = 100.0;
-        cfg.v2_max_atr_bps = 50.0;
-        let err = cfg.validate_strategy_config().unwrap_err();
-        assert!(err.to_string().contains("v2_max_atr_bps"));
+        cfg.v2_min_atr_bps = 50.0;
+        cfg.v2_max_atr_bps = 30.0;
+        assert!(cfg.validate_strategy_config().is_err());
+    }
+
+    // ── Strategy runner config tests ──────────────────────────────────────────
+
+    #[test]
+    fn parses_strategy_run_mode_single() {
+        let toml = "[backtest]\nstrategy_run_mode = \"single\"\n";
+        let cfg = ResearchConfig::parse(toml);
+        assert_eq!(cfg.strategy_run_mode, "single");
     }
 
     #[test]
-    fn rejects_invalid_v2_vwap_distance_range() {
+    fn parses_strategy_run_mode_comparison() {
+        let toml = "[backtest]\nstrategy_run_mode = \"comparison\"\n";
+        let cfg = ResearchConfig::parse(toml);
+        assert_eq!(cfg.strategy_run_mode, "comparison");
+    }
+
+    #[test]
+    fn parses_backtest_strategies_array() {
+        let toml =
+            "[backtest]\nstrategies = [\"screened_vwap_scalp\", \"screened_vwap_scalp_v2\"]\n";
+        let cfg = ResearchConfig::parse(toml);
+        assert_eq!(
+            cfg.strategies,
+            vec!["screened_vwap_scalp", "screened_vwap_scalp_v2"]
+        );
+    }
+
+    #[test]
+    fn default_strategy_run_mode_is_single() {
+        let cfg = default_cfg();
+        assert_eq!(cfg.strategy_run_mode, "single");
+        assert!(cfg.strategies.is_empty());
+    }
+
+    #[test]
+    fn selected_strategies_falls_back_to_strategy_id() {
         let mut cfg = default_cfg();
-        cfg.v2_vwap_distance_atr_min = 3.0;
-        cfg.v2_vwap_distance_atr_max = 1.0;
-        let err = cfg.validate_strategy_config().unwrap_err();
-        assert!(err.to_string().contains("v2_vwap_distance_atr_max"));
+        cfg.strategy_id = "screened_vwap_scalp_v2".to_string();
+        cfg.strategy_run_mode = "single".to_string();
+        cfg.strategies = vec![];
+        let strats = cfg.selected_strategies().unwrap();
+        assert_eq!(strats, vec!["screened_vwap_scalp_v2"]);
+    }
+
+    #[test]
+    fn selected_strategies_uses_backtest_strategies() {
+        let mut cfg = default_cfg();
+        cfg.strategy_run_mode = "single".to_string();
+        cfg.strategies = vec!["screened_vwap_scalp_v2".to_string()];
+        let strats = cfg.selected_strategies().unwrap();
+        assert_eq!(strats, vec!["screened_vwap_scalp_v2"]);
+    }
+
+    #[test]
+    fn selected_strategies_comparison_returns_all() {
+        let mut cfg = default_cfg();
+        cfg.strategy_run_mode = "comparison".to_string();
+        cfg.strategies = vec![
+            "screened_vwap_scalp".to_string(),
+            "screened_vwap_scalp_v2".to_string(),
+        ];
+        let strats = cfg.selected_strategies().unwrap();
+        assert_eq!(
+            strats,
+            vec!["screened_vwap_scalp", "screened_vwap_scalp_v2"]
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_strategy_run_mode() {
+        let mut cfg = default_cfg();
+        cfg.strategy_run_mode = "turbo_mode".to_string();
+        let err = cfg.validate_strategy_runner_config().unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("turbo_mode"), "must name the bad mode: {msg}");
+    }
+
+    #[test]
+    fn rejects_duplicate_strategies() {
+        let mut cfg = default_cfg();
+        cfg.strategy_run_mode = "comparison".to_string();
+        cfg.strategies = vec![
+            "screened_vwap_scalp".to_string(),
+            "screened_vwap_scalp".to_string(),
+        ];
+        let err = cfg.validate_strategy_runner_config().unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("duplicate"), "must say duplicate: {msg}");
+    }
+
+    #[test]
+    fn rejects_unknown_strategy_in_strategies() {
+        let mut cfg = default_cfg();
+        cfg.strategy_run_mode = "comparison".to_string();
+        cfg.strategies = vec!["screened_vwap_scalp".to_string(), "bad_strat".to_string()];
+        let err = cfg.validate_strategy_runner_config().unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("bad_strat"), "must name the bad strategy: {msg}");
+    }
+
+    #[test]
+    fn rejects_multi_mode_as_not_implemented() {
+        let mut cfg = default_cfg();
+        cfg.strategy_run_mode = "multi".to_string();
+        let err = cfg.validate_strategy_runner_config().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not implemented"),
+            "must say not implemented: {msg}"
+        );
+        assert!(
+            msg.contains("comparison"),
+            "must suggest comparison mode: {msg}"
+        );
+    }
+
+    #[test]
+    fn single_mode_rejects_multiple_strategies() {
+        let mut cfg = default_cfg();
+        cfg.strategy_run_mode = "single".to_string();
+        cfg.strategies = vec![
+            "screened_vwap_scalp".to_string(),
+            "screened_vwap_scalp_v2".to_string(),
+        ];
+        let err = cfg.validate_strategy_runner_config().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("comparison"),
+            "must suggest comparison mode: {msg}"
+        );
+    }
+
+    #[test]
+    fn comparison_mode_requires_at_least_one_strategy() {
+        let mut cfg = default_cfg();
+        cfg.strategy_run_mode = "comparison".to_string();
+        cfg.strategies = vec![];
+        let err = cfg.validate_strategy_runner_config().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("at least one"),
+            "must mention at least one: {msg}"
+        );
+    }
+
+    #[test]
+    fn with_strategy_for_run_overrides_strategy_and_reports_dir() {
+        let cfg = default_cfg();
+        let run_cfg = cfg.with_strategy_for_run("screened_vwap_scalp_v2", "reports/v2".to_string());
+        assert_eq!(run_cfg.strategy_id, "screened_vwap_scalp_v2");
+        assert_eq!(run_cfg.reports_dir, "reports/v2");
+        // Other fields unchanged.
+        assert_eq!(run_cfg.initial_equity, cfg.initial_equity);
+        assert_eq!(run_cfg.symbols, cfg.symbols);
+    }
+
+    #[test]
+    fn single_mode_with_empty_strategies_and_strategy_id_passes_validation() {
+        let mut cfg = default_cfg();
+        cfg.strategy_run_mode = "single".to_string();
+        cfg.strategy_id = "screened_vwap_scalp_v2".to_string();
+        cfg.strategies = vec![];
+        assert!(cfg.validate_strategy_runner_config().is_ok());
+        let strats = cfg.selected_strategies().unwrap();
+        assert_eq!(strats, vec!["screened_vwap_scalp_v2"]);
     }
 }

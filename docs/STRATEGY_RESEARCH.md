@@ -8,7 +8,146 @@ Northflow supports deterministic, configurable strategy variants for controlled 
 
 ---
 
-## Strategy variants
+## Strategy Run Modes
+
+Set `strategy_run_mode` in the `[backtest]` section of your TOML config.
+
+| Mode | Description |
+|---|---|
+| `single` | Run one strategy, write reports to `reports_dir` (default, fully backwards-compatible) |
+| `comparison` | Run multiple strategies independently, each in its own subfolder; write aggregate summary |
+| `multi` | Reserved — returns a config error; use `comparison` instead |
+
+### Single mode (default)
+
+```toml
+[backtest]
+reports_dir = "reports/v2_run"
+strategy_run_mode = "single"
+strategies = ["screened_vwap_scalp_v2"]
+# or leave strategies empty — falls back to [strategy].strategy_id
+```
+
+Single mode is identical to the legacy behaviour when `strategy_run_mode` and `strategies` are omitted.
+
+### Comparison mode
+
+```toml
+[backtest]
+reports_dir = "reports/comparison"
+strategy_run_mode = "comparison"
+strategies = ["screened_vwap_scalp", "screened_vwap_scalp_v2"]
+```
+
+Each strategy gets its own isolated subfolder and independent equity/risk state:
+
+```
+reports/comparison/screened_vwap_scalp/
+  backtest_summary.json
+  trades.csv
+  equity_curve.csv
+  ...all Phase 7 files...
+
+reports/comparison/screened_vwap_scalp_v2/
+  backtest_summary.json
+  trades.csv
+  ...
+
+reports/comparison/comparison_summary.csv    ← one row per strategy
+reports/comparison/comparison_summary.json   ← same data in JSON
+```
+
+For **multi-symbol** comparison the layout nests symbol under base dir:
+
+```
+reports/comparison/BTCUSDT/screened_vwap_scalp/
+reports/comparison/BTCUSDT/screened_vwap_scalp_v2/
+reports/comparison/ETHUSDT/screened_vwap_scalp/
+...
+reports/comparison/comparison_summary.csv
+reports/comparison/comparison_summary.json
+```
+
+---
+
+## Comparison Summary Files
+
+### comparison_summary.csv
+
+One row per symbol × strategy run, plus a header row.
+
+| Column | Description |
+|---|---|
+| `symbol` | Trading pair (e.g. `BTCUSDT`) |
+| `strategy_id` | Strategy that produced this row |
+| `reports_dir` | Relative path to the per-strategy report folder |
+| `status` | `ok` or `error` |
+| `error` | Error message if status = `error`, empty otherwise |
+| `total_trades` | Number of closed trades |
+| `win_rate` | Percentage of winning trades (0–100) |
+| `net_pnl` | Net profit/loss after all costs |
+| `gross_pnl` | Gross profit/loss before costs |
+| `total_fee` | Total taker fees paid |
+| `total_slippage` | Total slippage paid |
+| `total_cost` | Total cost: fee + slippage + spread + market impact |
+| `profit_factor` | Gross profit / gross loss (0 when undefined) |
+| `expectancy` | Expected PnL per trade |
+| `max_drawdown` | Maximum equity drawdown (%) |
+| `max_consecutive_losses` | Worst consecutive losing streak |
+| `avg_expected_edge_bps` | Average expected edge in basis points |
+| `avg_actual_edge_bps` | Average realised edge in basis points |
+| `avg_edge_realization_bps` | actual − expected edge (bps) |
+| `avg_total_cost_bps` | Average all-in cost per trade (bps) |
+| `signals_generated` | Total signals produced by the strategy |
+| `signals_preapproved` | Signals that passed initial risk check |
+| `signals_rejected_initial_risk` | Signals blocked at signal-close price |
+| `signals_rejected_actual_entry` | Signals blocked at actual next-bar open |
+| `trades_opened` | Positions opened |
+| `trades_closed` | Positions closed |
+| `risk_rejections` | Total RiskRejection rows written |
+| `dominant_rejection_reason` | Most common rejection reason string |
+| `dominant_rejection_count` | Count for dominant rejection reason |
+
+### comparison_summary.json
+
+Same data as the CSV in JSON array form, wrapped in:
+
+```json
+{
+  "mode": "comparison",
+  "runs": [ ... ]
+}
+```
+
+---
+
+## Isolation Guarantee
+
+Each strategy in comparison mode runs with **independent state**:
+
+- Separate `initial_equity` counter
+- Separate drawdown and daily-loss accumulators
+- Separate risk rejection log
+- Separate signal ID sequence (restarted from `SIG-BT-00000001`)
+
+Runs are sequential, not concurrent. Results are fully deterministic.
+
+---
+
+## Validation Rules
+
+`validate_strategy_runner_config()` is called before any backtest runs and enforces:
+
+1. `strategy_run_mode` must be `"single"`, `"comparison"`, or `"multi"` (reserved).
+2. `"multi"` returns a clear error pointing to `"comparison"`.
+3. No duplicate strategy IDs in `strategies`.
+4. Each entry in `strategies` must be a known strategy ID.
+5. `"single"` mode: `strategies` can have 0 or 1 items; 2+ is rejected with a clear suggestion to use `"comparison"`.
+6. `"comparison"` mode: `strategies` must have at least 1 item.
+
+---
+
+## Strategy Variants
 
 | `strategy_id` | Description |
 |---|---|
@@ -21,7 +160,7 @@ V2 is a diagnostic/research variant only. It is not a profitability claim and is
 
 ---
 
-## Switching strategy
+## Switching Strategy (single mode)
 
 Edit `config/research.toml`:
 
@@ -39,7 +178,39 @@ cargo run -- research --config config/research.toml
 
 ---
 
-## Comparing V1 vs V2 with separate reports directories
+## Comparing V1 vs V2 with the comparison runner
+
+Set `strategy_run_mode = "comparison"` and list both strategies:
+
+```toml
+[strategy]
+strategy_id = "screened_vwap_scalp_v2"   # used as fallback if strategies is empty
+
+[backtest]
+data_dir = "data/historical"
+reports_dir = "reports/comparison"
+strategy_run_mode = "comparison"
+strategies = ["screened_vwap_scalp", "screened_vwap_scalp_v2"]
+```
+
+Run:
+
+```bash
+cargo run -- research --config config/research.toml
+```
+
+Reports written to:
+
+```
+reports/comparison/screened_vwap_scalp/
+reports/comparison/screened_vwap_scalp_v2/
+reports/comparison/comparison_summary.csv
+reports/comparison/comparison_summary.json
+```
+
+---
+
+## Comparing V1 vs V2 with separate configs (legacy approach)
 
 Run V1:
 
@@ -48,16 +219,12 @@ Run V1:
 strategy_id = "screened_vwap_scalp"
 
 [backtest]
-reports_dir = "reports/v1_reanchor"
-entry_geometry_mode = "reanchor_to_actual_entry"
-
-[risk]
-max_drawdown_pct = 100.0
-max_daily_loss_pct = 100.0
+data_dir = "data/historical"
+reports_dir = "reports/v1"
 ```
 
 ```bash
-cargo run --release -- research --config config/research.toml
+cargo run -- research --config config/v1.toml
 ```
 
 Run V2:
@@ -65,108 +232,38 @@ Run V2:
 ```toml
 [strategy]
 strategy_id = "screened_vwap_scalp_v2"
-v2_require_strict_confirmation = true
-v2_require_ema_ribbon_alignment = true
-v2_allow_neutral_confirmation = false
-v2_min_expected_reward_bps = 25.0
-v2_min_expected_net_edge_bps = 10.0
-v2_min_atr_bps = 8.0
-v2_max_atr_bps = 120.0
-v2_tp_atr_multiple = 2.5
-v2_sl_atr_multiple = 1.0
-v2_min_volume_ratio = 1.0
-v2_vwap_distance_atr_min = 0.0
-v2_vwap_distance_atr_max = 1.5
-v2_cooldown_bars = 5
-v2_enable_long = true
-v2_enable_short = true
 
 [backtest]
-reports_dir = "reports/v2_reanchor"
-entry_geometry_mode = "reanchor_to_actual_entry"
-
-[risk]
-max_drawdown_pct = 100.0
-max_daily_loss_pct = 100.0
+data_dir = "data/historical"
+reports_dir = "reports/v2"
 ```
 
 ```bash
-cargo run --release -- research --config config/research.toml
+cargo run -- research --config config/v2.toml
 ```
 
-Compare `reports/v1_reanchor/` vs `reports/v2_reanchor/` side by side.
+Compare `reports/v1/backtest_summary.json` vs `reports/v2/backtest_summary.json`.
 
 ---
 
-## Recommended diagnostic mode
+## V2 Config Keys
 
-For research comparison, disable risk guards so every signal that passes the strategy gets a trade:
+All `v2_*` keys live under `[strategy]` in the TOML:
 
-```toml
-[risk]
-max_drawdown_pct = 100.0
-max_daily_loss_pct = 100.0
-```
-
-This allows the full signal set to flow through to trades, giving the best view of the strategy's raw edge before portfolio-level risk constraints are applied.
-
----
-
-## V2 configurable parameters
-
-| Parameter | Default | Description |
+| Key | Default | Description |
 |---|---|---|
-| `v2_require_strict_confirmation` | `true` | 5m regime must exactly match 15m regime direction. |
-| `v2_require_ema_ribbon_alignment` | `true` | 1m ema_8 / ema_21 / ema_50 must align with side. |
-| `v2_allow_neutral_confirmation` | `false` | Allow neutral 5m when strict confirmation is off. |
-| `v2_min_expected_reward_bps` | `20.0` | Minimum expected reward in basis points before cost. |
-| `v2_min_expected_net_edge_bps` | `5.0` | Minimum expected net edge in basis points after cost. |
-| `v2_min_atr_bps` | `5.0` | Minimum ATR in basis points (volatility floor). |
-| `v2_max_atr_bps` | `150.0` | Maximum ATR in basis points (volatility ceiling). |
-| `v2_tp_atr_multiple` | `2.0` | Take profit = entry ± atr × this multiple. |
-| `v2_sl_atr_multiple` | `1.0` | Stop loss = entry ± atr × this multiple. |
-| `v2_min_volume_ratio` | `1.0` | Volume must be ≥ this multiple of volume_sma_20. |
-| `v2_vwap_distance_atr_min` | `0.0` | Minimum distance from VWAP or EMA21 in ATR units. |
-| `v2_vwap_distance_atr_max` | `2.0` | Maximum distance from VWAP or EMA21 in ATR units. |
-| `v2_cooldown_bars` | `0` | Bars to wait after a signal before evaluating again. |
-| `v2_enable_long` | `true` | Allow long signals. |
-| `v2_enable_short` | `true` | Allow short signals. |
-
----
-
-## Report files
-
-Every backtest run (V1 or V2) produces the same set of report files in `reports_dir/`:
-
-```
-backtest_summary.json
-trades.csv
-equity_curve.csv
-risk_rejections.csv
-signal_flow_summary.json
-attribution_summary.json
-attribution_by_regime.csv
-attribution_by_exit_reason.csv
-attribution_by_side.csv
-attribution_by_filter.csv
-attribution_by_strategy.csv
-audit_report.json
-report_manifest.json
-signal_diagnostics.csv
-rejection_by_stage_reason.csv
-monthly_summary.csv
-cost_edge_distribution.csv
-trade_distribution_summary.json
-```
-
-`attribution_by_strategy.csv` groups performance by strategy variant, which is most useful when a future multi-strategy run combines V1 and V2 trades in a single backtest.
-
----
-
-## Important notes
-
-- All results are historical simulation only.
-- Do not use backtest results as financial advice or profitability claims.
-- V2 reduces signal count compared to V1, which may reduce or increase edge depending on the dataset.
-- No optimizer, grid search, or walk-forward optimization is used.
-- Strategy parameters are set by the researcher before the run, not by the engine.
+| `v2_require_strict_confirmation` | `true` | Require 5m close to agree with 15m bias |
+| `v2_require_ema_ribbon_alignment` | `true` | Require EMA 8 > 21 > 50 (long) or reversed (short) |
+| `v2_allow_neutral_confirmation` | `false` | Accept neutral 5m candle as confirmation |
+| `v2_min_expected_reward_bps` | `20.0` | Minimum expected TP reward in bps |
+| `v2_min_expected_net_edge_bps` | `5.0` | Minimum expected edge net of cost in bps |
+| `v2_min_atr_bps` | `5.0` | Minimum ATR in bps (low-volatility filter) |
+| `v2_max_atr_bps` | `150.0` | Maximum ATR in bps (high-volatility filter) |
+| `v2_tp_atr_multiple` | `2.0` | Take-profit = entry ± TP multiple × ATR |
+| `v2_sl_atr_multiple` | `1.0` | Stop-loss = entry ∓ SL multiple × ATR |
+| `v2_min_volume_ratio` | `1.0` | Signal-bar volume / 20-bar volume SMA ratio |
+| `v2_vwap_distance_atr_min` | `0.0` | Minimum distance from VWAP in ATR multiples |
+| `v2_vwap_distance_atr_max` | `2.0` | Maximum distance from VWAP in ATR multiples |
+| `v2_cooldown_bars` | `0` | Bars to skip after a signal (prevents clustering) |
+| `v2_enable_long` | `true` | Allow long signals |
+| `v2_enable_short` | `true` | Allow short signals |
