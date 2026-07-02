@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "total_trades": 13,
+  "error_count": 0,
+  "warning_count": 0,
+  "issues":   [
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000001","signal_id":"SIG-BT-00000001"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000002","signal_id":"SIG-BT-00000002"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000003","signal_id":"SIG-BT-00000003"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000004","signal_id":"SIG-BT-00000004"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000005","signal_id":"SIG-BT-00000005"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000006","signal_id":"SIG-BT-00000006"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000007","signal_id":"SIG-BT-00000007"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000008","signal_id":"SIG-BT-00000008"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000009","signal_id":"SIG-BT-00000009"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-0000000A","signal_id":"SIG-BT-0000000A"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-0000000B","signal_id":"SIG-BT-0000000B"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-0000000C","signal_id":"SIG-BT-0000000C"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-0000000D","signal_id":"SIG-BT-0000000D"}
+  ]
+}
