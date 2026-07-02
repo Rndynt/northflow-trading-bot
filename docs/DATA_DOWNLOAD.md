@@ -324,3 +324,42 @@ trade_distribution_summary.json
 - 5m and 15m candles are built internally from 1m candles.
 - Do not mix spot, USD-M futures, and COIN-M futures in one historical file.
 - Keep one symbol per CSV file.
+
+## Multi-year historical files
+
+The downloader still writes its final converted CSV to the legacy path:
+
+```text
+data/historical/<SYMBOL>.csv
+```
+
+That legacy path is intentionally kept for backward-compatible research configs. If you download several years in a loop, copy the generated file after each yearly run into a symbol/timeframe/year path and reference those files from `[historical_files]` in the research config.
+
+Example yearly workflow for BTCUSDT 1m data:
+
+```bash
+mkdir -p data/historical/BTCUSDT/1m
+
+for y in 2020 2021 2022 2023 2024 2025; do
+  ./scripts/download_binance_klines.sh BTCUSDT "$y" 01 12 um 1m
+  cp data/historical/BTCUSDT.csv "data/historical/BTCUSDT/1m/BTCUSDT-1m-$y.csv"
+done
+
+git checkout -- data/historical/BTCUSDT.csv
+```
+
+Then configure the backtest with explicit, symbol-scoped historical files:
+
+```toml
+[historical_files]
+BTCUSDT = [
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2020.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2021.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2022.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2023.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2024.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2025.csv",
+]
+```
+
+When `historical_files.<SYMBOL>` is present and non-empty, Northflow loads the files in the declared order. Otherwise it falls back to `data_dir/<SYMBOL>.csv`. The loader rejects duplicate or out-of-order timestamps across the merged stream instead of sorting away cross-file mistakes.

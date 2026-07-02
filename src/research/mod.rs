@@ -11,8 +11,6 @@
 
 pub mod comparison;
 
-use std::path::Path;
-
 use crate::backtest::{BacktestEngine, ReportWriter};
 use crate::config::ResearchConfig;
 use crate::market::{DataQualityIssueKind, OhlcvLoader};
@@ -288,7 +286,14 @@ fn run_strategy_comparison(cfg: &ResearchConfig) -> Result<(), String> {
                     ));
                 }
                 Ok(None) => {
-                    let msg = format!("no CSV found at {}/{symbol}.csv", cfg.data_dir);
+                    let msg = format!(
+                        "no historical CSV found at {}",
+                        cfg.historical_paths_for(symbol)
+                            .iter()
+                            .map(|p| p.display().to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
                     println!("  {msg}");
                     println!();
                     runs.push(ComparisonRunResult::error(
@@ -362,9 +367,9 @@ fn run_symbol_strategy(
     cfg: &ResearchConfig,
     symbol: &str,
 ) -> Result<Option<CompletedResearchRun>, String> {
-    let csv_path = Path::new(&cfg.data_dir).join(format!("{symbol}.csv"));
+    let data_paths = cfg.historical_paths_for(symbol);
 
-    if !csv_path.exists() {
+    if data_paths.iter().any(|path| !path.exists()) {
         return Ok(None);
     }
 
@@ -460,19 +465,22 @@ fn run_symbol_strategy(
 /// Run a symbol in single mode with full verbose CLI output.
 /// Preserves existing single-mode behavior exactly.
 fn run_symbol_verbose(cfg: &ResearchConfig, symbol: &str) {
-    let csv_path = Path::new(&cfg.data_dir).join(format!("{symbol}.csv"));
+    let data_paths = cfg.historical_paths_for(symbol);
 
-    if !csv_path.exists() {
+    if data_paths.iter().any(|path| !path.exists()) {
         println!("Symbol: {symbol}");
         println!("  No historical CSV found.");
-        println!("  Expected path: {}", csv_path.display());
-        println!("  Place a 1m OHLCV CSV file with columns:");
+        println!("  Expected path(s):");
+        for path in &data_paths {
+            println!("    {}", path.display());
+        }
+        println!("  Place 1m OHLCV CSV file(s) with columns:");
         println!("    timestamp,open,high,low,close,volume");
         println!();
         return;
     }
 
-    let data_quality_ok = print_data_quality(cfg, symbol, &csv_path);
+    let data_quality_ok = print_data_quality(cfg, symbol, &data_paths);
     if !data_quality_ok {
         println!("  Skipping backtest — fix data quality errors first.");
         println!();
@@ -628,10 +636,18 @@ fn run_symbol_verbose(cfg: &ResearchConfig, symbol: &str) {
 // ── Data quality printer ──────────────────────────────────────────────────────
 
 /// Print data quality for the symbol.  Returns `true` if no errors.
-fn print_data_quality(cfg: &ResearchConfig, symbol: &str, csv_path: &Path) -> bool {
+fn print_data_quality(
+    cfg: &ResearchConfig,
+    symbol: &str,
+    data_paths: &[std::path::PathBuf],
+) -> bool {
     use crate::market::CandleStore;
 
-    let load_result = match OhlcvLoader::load_file(csv_path) {
+    let load_result = match if data_paths.len() > 1 {
+        OhlcvLoader::load_files(data_paths)
+    } else {
+        OhlcvLoader::load_file(&data_paths[0])
+    } {
         Ok(r) => r,
         Err(e) => {
             println!("  Error loading {symbol}: {e}");
@@ -677,7 +693,14 @@ fn print_data_quality(cfg: &ResearchConfig, symbol: &str, csv_path: &Path) -> bo
         .count();
 
     println!("Symbol:                {symbol}");
-    println!("Source:                {}", csv_path.display());
+    println!(
+        "Source:                {}",
+        data_paths
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     println!("Raw 1m candles:        {}", store.raw_1m.len());
     println!(
         "Entry ({}) candles:   {}",

@@ -5,7 +5,11 @@
 //!   screening_timeframe    = "15m"  (regime bias)
 //!   confirmation_timeframe = "5m"   (confirmation)
 
-use std::{fs, path::Path};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use crate::core::{NorthflowError, Timeframe};
 
@@ -127,6 +131,7 @@ pub struct ResearchConfig {
     pub confirmation_timeframe: String,
     // data / output
     pub data_dir: String,
+    pub historical_files: HashMap<String, Vec<PathBuf>>,
     pub reports_dir: String,
     // strategy selection
     pub strategy_id: String,
@@ -199,6 +204,7 @@ impl Default for ResearchConfig {
             screening_timeframe: "15m".to_string(),
             confirmation_timeframe: "5m".to_string(),
             data_dir: "data/historical".to_string(),
+            historical_files: HashMap::new(),
             reports_dir: "reports".to_string(),
             strategy_id: "screened_vwap_scalp".to_string(),
             strategy_run_mode: "single".to_string(),
@@ -267,6 +273,7 @@ impl ResearchConfig {
 
     pub fn parse(raw: &str) -> Self {
         let mut cfg = Self::default();
+        cfg.historical_files = parse_historical_files(raw);
         for line in raw.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') || line.starts_with('[') {
@@ -415,6 +422,18 @@ impl ResearchConfig {
             }
         }
         cfg
+    }
+
+    /// Resolve historical data paths for a symbol.
+    ///
+    /// If `[historical_files].SYMBOL` is configured with one or more paths,
+    /// those files are returned in declared order. Otherwise, the legacy
+    /// `data_dir/SYMBOL.csv` path is returned for backward compatibility.
+    pub fn historical_paths_for(&self, symbol: &str) -> Vec<PathBuf> {
+        match self.historical_files.get(symbol) {
+            Some(paths) if !paths.is_empty() => paths.clone(),
+            _ => vec![Path::new(&self.data_dir).join(format!("{symbol}.csv"))],
+        }
     }
 
     /// Extract an `EtpConfig` from the etp_* fields of this `ResearchConfig`.
@@ -818,6 +837,61 @@ impl ResearchConfig {
 
         Ok(())
     }
+}
+
+fn parse_historical_files(raw: &str) -> HashMap<String, Vec<PathBuf>> {
+    let mut files = HashMap::new();
+    let mut in_section = false;
+    let mut pending_key: Option<String> = None;
+    let mut pending_value = String::new();
+
+    for raw_line in raw.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_section = line == "[historical_files]";
+            continue;
+        }
+        if !in_section {
+            continue;
+        }
+
+        if let Some(key) = pending_key.clone() {
+            pending_value.push(' ');
+            pending_value.push_str(line);
+            if line.contains(']') {
+                files.insert(key, parse_path_array(&pending_value));
+                pending_key = None;
+                pending_value.clear();
+            }
+            continue;
+        }
+
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim().trim_matches('"').to_string();
+        let value = value.trim();
+        if value.contains('[') && !value.contains(']') {
+            pending_key = Some(key);
+            pending_value = value.to_string();
+        } else {
+            files.insert(key, parse_path_array(value));
+        }
+    }
+
+    files
+}
+
+fn parse_path_array(raw: &str) -> Vec<PathBuf> {
+    let trimmed = raw.trim().trim_start_matches('[').trim_end_matches(']');
+    parse_string_array(trimmed)
+        .into_iter()
+        .filter(|p| !p.trim().is_empty())
+        .map(PathBuf::from)
+        .collect()
 }
 
 fn parse_string_array(value: &str) -> Vec<String> {
@@ -1328,6 +1402,33 @@ mod tests {
         assert!(
             msg.contains("bad_strat"),
             "must name the bad strategy: {msg}"
+        );
+    }
+
+    #[test]
+    fn parses_multiline_historical_files_and_legacy_fallback() {
+        let cfg = ResearchConfig::parse(
+            r#"
+[pairs]
+symbols = ["BTCUSDT", "ETHUSDT"]
+
+[historical_files]
+BTCUSDT = [
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2020.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2021.csv",
+]
+"#,
+        );
+
+        let btc_paths = cfg.historical_paths_for("BTCUSDT");
+        assert_eq!(btc_paths.len(), 2);
+        assert_eq!(
+            btc_paths[0],
+            std::path::PathBuf::from("data/historical/BTCUSDT/1m/BTCUSDT-1m-2020.csv")
+        );
+        assert_eq!(
+            cfg.historical_paths_for("ETHUSDT"),
+            vec![std::path::PathBuf::from("data/historical/ETHUSDT.csv")]
         );
     }
 }
