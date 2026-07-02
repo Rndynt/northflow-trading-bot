@@ -439,7 +439,7 @@ mod tests {
 
     #[test]
     fn long_signal_has_required_timeframes() {
-        let sig = strategy()
+        let _sig = strategy()
             .evaluate(&default_ctx(), &long_input())
             .unwrap()
             .unwrap();
@@ -527,7 +527,7 @@ mod tests {
 
     #[test]
     fn short_signal_has_required_timeframes() {
-        let sig = strategy()
+        let _sig = strategy()
             .evaluate(&default_ctx(), &short_input())
             .unwrap()
             .unwrap();

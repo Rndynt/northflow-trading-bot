@@ -713,7 +713,7 @@ mod tests {
     fn etp_long_close_reclaim_trigger() {
         let cfg = good_cfg(); // reclaim_mode = "close_reclaim"
         let strat = EmaTrendPullbackV1::new(cfg);
-        let mut input = good_long_input();
+        let input = good_long_input();
         input.cfg_reclaim_mode_is_close_reclaim_or_wick_noop(); // no-op, just documenting
                                                                 // Valid long close_reclaim: low <= ema21, close > ema21, close > open
         assert!(strat.evaluate(&ctx(), &input).unwrap().is_some());

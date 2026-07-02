@@ -701,7 +701,7 @@ mod tests {
 
     #[test]
     fn v2_signal_has_required_timeframes() {
-        let sig = strategy()
+        let _sig = strategy()
             .evaluate(&default_ctx(), &long_input())
             .unwrap()
             .unwrap();
