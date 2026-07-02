@@ -1,0 +1,2 @@
+key,trades,wins,losses,win_rate,net_pnl,gross_pnl,total_fee,total_slippage,avg_net_pnl,avg_expected_edge_bps,avg_actual_edge_bps,avg_bars_held
+ema_trend_pullback_v1,8,6,2,75.000000,110.833013,204.233135,49.377720,44.022402,13.854127,40.691673,17.307189,5.375000
