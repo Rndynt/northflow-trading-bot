@@ -77,5 +77,6 @@ reports_dir = "reports/vwap_reclaim_trend_v1"
 conservative_intrabar = true
 max_bars_held = 60
 entry_geometry_mode = "reanchor_to_actual_entry"
+entry_lookback_bars = 0
 strategy_run_mode = "single"
 strategies = ["ema_trend_pullback_v1"]

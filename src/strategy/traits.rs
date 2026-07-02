@@ -41,6 +41,11 @@ pub struct StrategyContext {
 pub struct MultiTimeframeInput {
     /// Entry-timeframe candle at the evaluation moment.
     pub entry_candle: Candle,
+    /// Completed entry-timeframe candles before `entry_candle`.
+    ///
+    /// This history is built from the configured entry timeframe, excludes the
+    /// current entry candle, and must not contain future candles.
+    pub entry_lookback: Vec<Candle>,
     /// Confirmation-timeframe candle at the evaluation moment.
     pub confirmation_candle: Candle,
     /// Screening-timeframe candle at the evaluation moment.

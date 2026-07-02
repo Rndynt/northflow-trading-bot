@@ -1,11 +1,11 @@
-//! Backtest engine — deterministic 1m replay with no lookahead.
+//! Backtest engine — deterministic entry-timeframe replay with no lookahead.
 //!
 //! Flow:
-//!   1. Load 1m CSV.
+//!   1. Load configured entry-timeframe CSV.
 //!   2. Reject if data quality errors.
-//!   3. Build CandleStore (1m, 5m, 15m).
-//!   4. Precompute indicator snapshots for 5m and 15m.
-//!   5. Replay 1m candles chronologically.
+//!   3. Build CandleStore from configured timeframe roles.
+//!   4. Precompute indicator snapshots for confirmation and screening roles.
+//!   5. Replay entry-timeframe candles chronologically.
 //!   6. For each candle:
 //!      a. Handle pending entry (enter at candle open).
 //!         - Compute actual adverse entry price.
@@ -220,7 +220,7 @@ impl BacktestEngine {
         };
         let cooldown_bars = cfg.cooldown_bars_for_strategy(&cfg.strategy_id) as usize;
         let mut last_signal_bar: Option<usize> = None;
-        let mut eng_1m = IndicatorEngine::new_default()?;
+        let mut eng_entry = IndicatorEngine::new_default()?;
 
         let entry_candles = &store.entry_candles;
         let n = entry_candles.len();
@@ -230,15 +230,15 @@ impl BacktestEngine {
 
             if i > 0 && i % 50_000 == 0 {
                 println!(
-                    "  Backtest progress: {}/{} 1m candles ({:.1}%)",
+                    "  Backtest progress: {}/{} entry candles ({:.1}%)",
                     i,
                     n,
                     i as f64 / n as f64 * 100.0
                 );
             }
 
-            // Update 1m indicator engine.
-            let snap_1m = eng_1m.next(candle)?;
+            // Update entry-timeframe indicator engine.
+            let entry_snapshot = eng_entry.next(candle)?;
 
             // Day boundary — reset daily PnL.
             let day = candle.timestamp / 86_400_000;
@@ -417,10 +417,14 @@ impl BacktestEngine {
                 let max_screen_ts =
                     candle.timestamp + entry_tf.to_millis() - screening_tf.to_millis();
 
-                let snap5 = latest_snap(&snaps_conf, max_conf_ts);
-                let snap15 = latest_snap(&snaps_screen, max_screen_ts);
+                let confirmation_snapshot = latest_snap(&snaps_conf, max_conf_ts);
+                let screening_snapshot = latest_snap(&snaps_screen, max_screen_ts);
 
-                if let (Some((_, s5, c5)), Some((_, s15, c15))) = (snap5, snap15) {
+                if let (
+                    Some((_, confirmation_indicators, confirmation_candle)),
+                    Some((_, screening_indicators, screening_candle)),
+                ) = (confirmation_snapshot, screening_snapshot)
+                {
                     let estimated_cost = cost_cfg.taker_fee_bps * 2.0
                         + cost_cfg.slippage_bps * 2.0
                         + cost_cfg.spread_bps;
@@ -435,13 +439,17 @@ impl BacktestEngine {
                         screening_timeframe: screening_tf,
                     };
 
+                    let entry_lookback =
+                        entry_lookback_for(entry_candles, i, cfg.entry_lookback_bars);
+
                     let input = MultiTimeframeInput {
                         entry_candle: candle,
-                        confirmation_candle: *c5,
-                        screening_candle: *c15,
-                        entry_indicators: snap_1m.clone(),
-                        confirmation_indicators: s5.clone(),
-                        screening_indicators: s15.clone(),
+                        entry_lookback,
+                        confirmation_candle: *confirmation_candle,
+                        screening_candle: *screening_candle,
+                        entry_indicators: entry_snapshot.clone(),
+                        confirmation_indicators: confirmation_indicators.clone(),
+                        screening_indicators: screening_indicators.clone(),
                     };
 
                     match strategy.evaluate(&ctx, &input) {
@@ -672,6 +680,15 @@ fn build_rejection(
     }
 }
 
+fn entry_lookback_for(
+    entry_candles: &[Candle],
+    current_index: usize,
+    lookback_bars: usize,
+) -> Vec<Candle> {
+    let lookback_start = current_index.saturating_sub(lookback_bars);
+    entry_candles[lookback_start..current_index].to_vec()
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -716,6 +733,54 @@ mod tests {
             close,
             volume: 1000.0,
         }
+    }
+
+    #[test]
+    fn entry_lookback_excludes_current_candle() {
+        let candles = vec![
+            make_candle(1, 10.0, 11.0, 9.0, 10.0),
+            make_candle(2, 20.0, 21.0, 19.0, 20.0),
+            make_candle(3, 30.0, 31.0, 29.0, 30.0),
+        ];
+
+        let lookback = entry_lookback_for(&candles, 2, 2);
+
+        assert_eq!(
+            lookback.iter().map(|c| c.timestamp).collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        assert!(!lookback.iter().any(|c| c.timestamp == candles[2].timestamp));
+    }
+
+    #[test]
+    fn entry_lookback_length_is_capped_by_configured_bars() {
+        let candles = vec![
+            make_candle(1, 10.0, 11.0, 9.0, 10.0),
+            make_candle(2, 20.0, 21.0, 19.0, 20.0),
+            make_candle(3, 30.0, 31.0, 29.0, 30.0),
+            make_candle(4, 40.0, 41.0, 39.0, 40.0),
+        ];
+
+        let lookback = entry_lookback_for(&candles, 3, 2);
+
+        assert_eq!(lookback.len(), 2);
+        assert_eq!(
+            lookback.iter().map(|c| c.timestamp).collect::<Vec<_>>(),
+            vec![2, 3]
+        );
+    }
+
+    #[test]
+    fn entry_lookback_first_candles_are_short_or_empty() {
+        let candles = vec![
+            make_candle(1, 10.0, 11.0, 9.0, 10.0),
+            make_candle(2, 20.0, 21.0, 19.0, 20.0),
+        ];
+
+        assert!(entry_lookback_for(&candles, 0, 3).is_empty());
+        let lookback = entry_lookback_for(&candles, 1, 3);
+        assert_eq!(lookback.len(), 1);
+        assert_eq!(lookback[0].timestamp, candles[0].timestamp);
     }
 
     fn long_signal() -> Signal {

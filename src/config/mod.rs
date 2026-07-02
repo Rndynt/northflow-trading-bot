@@ -157,6 +157,7 @@ pub struct ResearchConfig {
     pub max_bars_held: u32,
     pub min_confidence: u8,
     pub entry_geometry_mode: String,
+    pub entry_lookback_bars: usize,
     // v2 strategy filters
     pub v2_require_strict_confirmation: bool,
     pub v2_require_ema_ribbon_alignment: bool,
@@ -225,6 +226,7 @@ impl Default for ResearchConfig {
             max_bars_held: 60,
             min_confidence: 65,
             entry_geometry_mode: "preserve_signal_levels".to_string(),
+            entry_lookback_bars: 0,
             v2_require_strict_confirmation: true,
             v2_require_ema_ribbon_alignment: true,
             v2_allow_neutral_confirmation: false,
@@ -324,6 +326,9 @@ impl ResearchConfig {
                     cfg.min_confidence = value.parse().unwrap_or(cfg.min_confidence)
                 }
                 "entry_geometry_mode" => cfg.entry_geometry_mode = value.to_string(),
+                "entry_lookback_bars" => {
+                    cfg.entry_lookback_bars = value.parse().unwrap_or(cfg.entry_lookback_bars)
+                }
                 // V2 filters
                 "v2_require_strict_confirmation" => {
                     cfg.v2_require_strict_confirmation = value == "true"
@@ -936,6 +941,15 @@ mod tests {
         let cfg = default_cfg();
         // Default: 1m / 5m / 15m
         assert!(cfg.validate_timeframes().is_ok());
+    }
+
+    #[test]
+    fn entry_lookback_bars_defaults_to_zero_and_parses() {
+        let default_cfg = ResearchConfig::parse("[backtest]\n");
+        assert_eq!(default_cfg.entry_lookback_bars, 0);
+
+        let cfg = ResearchConfig::parse("[backtest]\nentry_lookback_bars = 12\n");
+        assert_eq!(cfg.entry_lookback_bars, 12);
     }
 
     #[test]
