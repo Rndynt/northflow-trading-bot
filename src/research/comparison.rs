@@ -165,7 +165,8 @@ impl ComparisonWriter {
 
     // ── CSV ───────────────────────────────────────────────────────────────────
 
-    pub const CSV_HEADER: &'static str = "symbol,strategy_id,reports_dir,status,error,total_trades,win_rate,net_pnl,gross_pnl,\
+    pub const CSV_HEADER: &'static str =
+        "symbol,strategy_id,reports_dir,status,error,total_trades,win_rate,net_pnl,gross_pnl,\
          total_fee,total_slippage,total_cost,profit_factor,expectancy,max_drawdown,\
          max_consecutive_losses,avg_expected_edge_bps,avg_actual_edge_bps,\
          avg_edge_realization_bps,avg_total_cost_bps,signals_generated,signals_preapproved,\

@@ -924,7 +924,11 @@ mod tests {
         cfg.confirmation_timeframe = "4h".to_string();
         cfg.screening_timeframe = "1h".to_string(); // screening shorter than confirmation
         let err = cfg.validate_timeframes().unwrap_err();
-        assert!(err.to_string().contains("confirmation_timeframe"), "{}", err);
+        assert!(
+            err.to_string().contains("confirmation_timeframe"),
+            "{}",
+            err
+        );
     }
 
     #[test]

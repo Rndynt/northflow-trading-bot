@@ -17,4 +17,4 @@ pub use geometry::EntryGeometryMode;
 pub use metrics::{BacktestSummary, EquityPoint, Metrics};
 pub use report::ReportWriter;
 pub use risk_trace::{RiskRejection, SignalFlowSummary};
-pub use walk_forward::{WalkForwardWindow, build_walk_forward_windows};
+pub use walk_forward::{build_walk_forward_windows, WalkForwardWindow};

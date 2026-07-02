@@ -499,7 +499,7 @@ mod tests {
     #[test]
     fn time_exit_after_max_bars() {
         let pos = open_long(60); // bars_held == max_bars_held
-        // price does NOT touch SL or TP
+                                 // price does NOT touch SL or TP
         let candle = make_candle(1_700_000_120_000, 30_100.0, 30_200.0, 30_050.0, 30_150.0);
         let exit = FillModel::check_exit(&pos, &candle, true, 2.0, 4.0, 60);
         assert!(exit.is_some());

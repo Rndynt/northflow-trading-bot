@@ -222,8 +222,8 @@ mod tests {
     use crate::backtest::metrics::EquityPoint;
     use crate::backtest::risk_trace::SignalFlowSummary;
     use crate::core::{
-        Trade, position::PositionId, side::Side, signal::SignalId, signal::StrategyId,
-        symbol::Symbol, trade::TradeExitReason, trade::TradeId,
+        position::PositionId, side::Side, signal::SignalId, signal::StrategyId, symbol::Symbol,
+        trade::TradeExitReason, trade::TradeId, Trade,
     };
     use crate::report::attribution::AttributionEngine;
     use crate::report::audit::ReportAuditor;

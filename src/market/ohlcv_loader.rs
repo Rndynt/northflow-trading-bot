@@ -488,12 +488,11 @@ mod tests {
         let r = OhlcvLoader::load_csv("test", &csv);
         assert!(r.candles.is_empty());
         assert_eq!(r.quality.rejected_rows, 1);
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::InvalidTimestamp)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::InvalidTimestamp));
     }
 
     #[test]
@@ -502,12 +501,11 @@ mod tests {
         let r = OhlcvLoader::load_csv("test", &csv);
         assert!(r.candles.is_empty());
         assert_eq!(r.quality.rejected_rows, 1);
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::InvalidTimestamp)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::InvalidTimestamp));
     }
 
     #[test]
@@ -532,12 +530,11 @@ mod tests {
         let r = OhlcvLoader::load_csv("test", &csv);
         assert!(r.candles.is_empty());
         assert_eq!(r.quality.rejected_rows, 1);
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::InvalidTimestamp)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::InvalidTimestamp));
     }
 
     #[test]
@@ -546,12 +543,11 @@ mod tests {
         let r = OhlcvLoader::load_csv("test", &csv);
         assert!(r.candles.is_empty());
         assert_eq!(r.quality.rejected_rows, 1);
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::InvalidTimestamp)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::InvalidTimestamp));
     }
 
     // ── rejection cases ───────────────────────────────────────────────────────
@@ -561,12 +557,11 @@ mod tests {
         let csv = "open,high,low,close,volume\n100.0,110.0,90.0,105.0,10.0\n";
         let r = OhlcvLoader::load_csv("test", csv);
         assert!(r.candles.is_empty());
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::MissingRequiredColumn)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::MissingRequiredColumn));
     }
 
     #[test]
@@ -574,12 +569,11 @@ mod tests {
         let csv = format!("{HDR}\n1700000000000,notanumber,110.0,90.0,105.0,10.0\n");
         let r = OhlcvLoader::load_csv("test", &csv);
         assert!(r.candles.is_empty());
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::InvalidNumber)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::InvalidNumber));
     }
 
     #[test]
@@ -587,12 +581,11 @@ mod tests {
         let csv = format!("{HDR}\nabc,100.0,110.0,90.0,105.0,10.0\n");
         let r = OhlcvLoader::load_csv("test", &csv);
         assert!(r.candles.is_empty());
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::InvalidTimestamp)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::InvalidTimestamp));
     }
 
     #[test]
@@ -601,12 +594,11 @@ mod tests {
         let csv = format!("{HDR}\n1700000000000,100.0,85.0,90.0,100.0,10.0\n");
         let r = OhlcvLoader::load_csv("test", &csv);
         assert!(r.candles.is_empty());
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::InvalidCandle)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::InvalidCandle));
     }
 
     // ── sorting & dedup ───────────────────────────────────────────────────────
@@ -631,12 +623,11 @@ mod tests {
             row_ms(1_700_000_000_000),
         );
         let r = OhlcvLoader::load_csv("test", &csv);
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::NonMonotonicTimestamp)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::NonMonotonicTimestamp));
     }
 
     #[test]
@@ -645,12 +636,11 @@ mod tests {
         let csv = format!("{HDR}\n{}\n{}\n", row_ms(ts), row_ms(ts));
         let r = OhlcvLoader::load_csv("test", &csv);
         assert_eq!(r.candles.len(), 1);
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::DuplicateTimestamp)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::DuplicateTimestamp));
     }
 
     // ── missing candle gap detection ─────────────────────────────────────────
@@ -713,12 +703,11 @@ mod tests {
             row_ms(base + 2 * SOURCE_TIMEFRAME_MS),
         );
         let r = OhlcvLoader::load_csv("test", &csv);
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::IrregularInterval)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::IrregularInterval));
         assert!(r.quality.has_errors());
     }
 
@@ -869,12 +858,11 @@ mod tests {
             .join("\n");
         let csv = format!("{HDR}\n{rows}\n");
         let r = OhlcvLoader::load_csv("test", &csv);
-        assert!(
-            !r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::IrregularInterval)
-        );
+        assert!(!r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::IrregularInterval));
     }
 
     #[test]
@@ -888,17 +876,15 @@ mod tests {
         let r = OhlcvLoader::load_csv("test", &csv);
         assert_eq!(r.quality.missing_gaps.len(), 1);
         assert_eq!(r.quality.missing_gaps[0].missing_count, 2);
-        assert!(
-            r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::MissingCandleGap)
-        );
-        assert!(
-            !r.quality
-                .issues
-                .iter()
-                .any(|i| i.kind == DataQualityIssueKind::IrregularInterval)
-        );
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::MissingCandleGap));
+        assert!(!r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::IrregularInterval));
     }
 }

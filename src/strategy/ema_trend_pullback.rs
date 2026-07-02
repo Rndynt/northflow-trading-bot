@@ -402,7 +402,7 @@ impl Strategy for EmaTrendPullbackV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
-        use crate::core::Timeframe;
+    use crate::core::Timeframe;
     use crate::core::{Candle, Symbol};
     use crate::indicators::IndicatorSnapshot;
     use crate::strategy::traits::MultiTimeframeInput;
@@ -674,9 +674,9 @@ mod tests {
         // close=50005, ema21=49990, dist=15, atr=100 → dist_atr=0.15 → OK actually
         // Need to push it far: set ema21 very far from close
         input.entry_indicators.ema_21 = Some(49_000.0); // dist = 1005, atr=100 → 10.05 ATR
-        // But also need to fix EMA alignment (ema_8 should be > new ema_21)
+                                                        // But also need to fix EMA alignment (ema_8 should be > new ema_21)
         input.entry_indicators.ema_8 = Some(49_100.0); // ema_8 > ema_21=49000
-        // ema_50 needs to be < ema_21
+                                                       // ema_50 needs to be < ema_21
         input.entry_indicators.ema_50 = Some(48_000.0);
         assert!(strat.evaluate(&ctx(), &input).unwrap().is_none());
     }
@@ -713,7 +713,7 @@ mod tests {
         let strat = EmaTrendPullbackV1::new(cfg);
         let mut input = good_long_input();
         input.cfg_reclaim_mode_is_close_reclaim_or_wick_noop(); // no-op, just documenting
-        // Valid long close_reclaim: low <= ema21, close > ema21, close > open
+                                                                // Valid long close_reclaim: low <= ema21, close > ema21, close > open
         assert!(strat.evaluate(&ctx(), &input).unwrap().is_some());
     }
 

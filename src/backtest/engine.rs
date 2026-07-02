@@ -28,7 +28,7 @@
 use std::path::Path;
 
 use crate::backtest::fill_model::{FillModel, OpenSimPosition};
-use crate::backtest::geometry::{EntryGeometryMode, adjusted_signal_for_actual_entry};
+use crate::backtest::geometry::{adjusted_signal_for_actual_entry, EntryGeometryMode};
 use crate::backtest::metrics::{BacktestSummary, EquityPoint, Metrics};
 use crate::backtest::risk_trace::{RiskRejection, SignalFlowSummary};
 use crate::config::ResearchConfig;
@@ -136,7 +136,8 @@ impl BacktestEngine {
             .map_err(|e| NorthflowError::ConfigError(format!("screening_timeframe: {e}")))?;
 
         // Build candle store with configured TF roles.
-        let store = CandleStore::build(load_result.candles, entry_tf, confirmation_tf, screening_tf)?;
+        let store =
+            CandleStore::build(load_result.candles, entry_tf, confirmation_tf, screening_tf)?;
 
         if store.entry_candles.is_empty() {
             return Ok(None);
@@ -405,8 +406,10 @@ impl BacktestEngine {
                 //     → conf_ts <= candle.ts + entry_tf.to_millis() - conf_tf.to_millis()
                 //   screen available: screen_ts + screen_tf.to_millis() <= signal_time
                 //     → screen_ts <= candle.ts + entry_tf.to_millis() - screen_tf.to_millis()
-                let max_conf_ts   = candle.timestamp + entry_tf.to_millis() - confirmation_tf.to_millis();
-                let max_screen_ts = candle.timestamp + entry_tf.to_millis() - screening_tf.to_millis();
+                let max_conf_ts =
+                    candle.timestamp + entry_tf.to_millis() - confirmation_tf.to_millis();
+                let max_screen_ts =
+                    candle.timestamp + entry_tf.to_millis() - screening_tf.to_millis();
 
                 let snap5 = latest_snap(&snaps_conf, max_conf_ts);
                 let snap15 = latest_snap(&snaps_screen, max_screen_ts);
@@ -1262,7 +1265,7 @@ mod tests {
     #[test]
     fn adjusted_signal_for_actual_entry_long_recalculates_expected_reward() {
         let signal = long_signal(); // entry=30000, TP=30600, SL=29700
-        // Adverse price slightly higher than original entry
+                                    // Adverse price slightly higher than original entry
         let actual_price = 30_006.0;
         let adjusted = adjusted_signal_for_actual_entry(
             &signal,
@@ -1368,7 +1371,7 @@ mod tests {
     #[test]
     fn actual_entry_valid_long_geometry_passes() {
         let signal = long_signal(); // entry=30000, TP=30600, SL=29700
-        // Slippage of 2 bps on 30000 → 30006 < TP=30600 and > SL=29700 → valid
+                                    // Slippage of 2 bps on 30000 → 30006 < TP=30600 and > SL=29700 → valid
         let actual_price = FillModel::adverse_entry_price(Side::Long, 30_000.0, 2.0);
         let adjusted = adjusted_signal_for_actual_entry(
             &signal,

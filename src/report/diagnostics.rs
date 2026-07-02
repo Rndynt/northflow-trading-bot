@@ -654,7 +654,7 @@ impl DiagnosticWriter {
         // write_all_with_trades (called from research/mod.rs).
         // We expose write_signal_diagnostics_rows for tests.
         let _ = report; // unused in this path; handled by caller
-        // write header-only placeholder (will be overwritten by full path)
+                        // write header-only placeholder (will be overwritten by full path)
         let path = dir.join("signal_diagnostics.csv");
         if !path.exists() {
             let header = "trade_id,signal_id,month,symbol,strategy_id,regime,side,entry_time,exit_time,duration_ms,entry_price,exit_price,stop_loss,take_profit,qty,gross_pnl,fee,slippage,total_cost,net_pnl,reward_risk,bars_held,exit_reason,expected_edge_bps,actual_edge_bps,edge_realization_bps,fee_bps,slippage_bps,total_cost_bps,net_pnl_bps,filters_passed,filters_failed,entry_reason\n";
@@ -923,12 +923,12 @@ mod tests {
     use super::*;
     use crate::backtest::risk_trace::SignalFlowSummary;
     use crate::core::{
-        Trade,
         position::PositionId,
         side::Side,
         signal::{SignalId, StrategyId},
         symbol::Symbol,
         trade::{TradeExitReason, TradeId},
+        Trade,
     };
 
     // ── helpers ───────────────────────────────────────────────────────────────

@@ -24,12 +24,12 @@ pub enum Timeframe {
 impl Timeframe {
     pub fn from_str(s: &str) -> Result<Self, NorthflowError> {
         match s.trim() {
-            "1m"  => Ok(Self::OneMinute),
-            "5m"  => Ok(Self::FiveMinute),
+            "1m" => Ok(Self::OneMinute),
+            "5m" => Ok(Self::FiveMinute),
             "15m" => Ok(Self::FifteenMinute),
             "30m" => Ok(Self::ThirtyMinute),
-            "1h"  => Ok(Self::OneHour),
-            "4h"  => Ok(Self::FourHour),
+            "1h" => Ok(Self::OneHour),
+            "4h" => Ok(Self::FourHour),
             other => Err(NorthflowError::InvalidTimeframe(format!(
                 "unknown timeframe '{other}'; expected one of: 1m, 5m, 15m, 30m, 1h, 4h"
             ))),
@@ -38,23 +38,23 @@ impl Timeframe {
 
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::OneMinute     => "1m",
-            Self::FiveMinute    => "5m",
+            Self::OneMinute => "1m",
+            Self::FiveMinute => "5m",
             Self::FifteenMinute => "15m",
-            Self::ThirtyMinute  => "30m",
-            Self::OneHour       => "1h",
-            Self::FourHour      => "4h",
+            Self::ThirtyMinute => "30m",
+            Self::OneHour => "1h",
+            Self::FourHour => "4h",
         }
     }
 
     pub fn to_seconds(self) -> u64 {
         match self {
-            Self::OneMinute     => 60,
-            Self::FiveMinute    => 300,
+            Self::OneMinute => 60,
+            Self::FiveMinute => 300,
             Self::FifteenMinute => 900,
-            Self::ThirtyMinute  => 1_800,
-            Self::OneHour       => 3_600,
-            Self::FourHour      => 14_400,
+            Self::ThirtyMinute => 1_800,
+            Self::OneHour => 3_600,
+            Self::FourHour => 14_400,
         }
     }
 

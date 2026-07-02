@@ -15,7 +15,7 @@
 //!   - write reports
 
 use crate::core::{NorthflowError, Side, Signal, SignalId, StrategyId};
-use crate::strategy::regime::{MarketRegime, classify_screening_regime};
+use crate::strategy::regime::{classify_screening_regime, MarketRegime};
 use crate::strategy::traits::{MultiTimeframeInput, Strategy, StrategyContext};
 
 // ── Public strategy struct ────────────────────────────────────────────────────
@@ -249,7 +249,7 @@ fn make_signal_id(index: u64) -> SignalId {
 #[cfg(test)]
 mod tests {
     use super::*;
-        use crate::core::Timeframe;
+    use crate::core::Timeframe;
     use crate::core::{Candle, Symbol};
     use crate::indicators::IndicatorSnapshot;
     use crate::strategy::traits::{MultiTimeframeInput, StrategyContext};
@@ -452,27 +452,22 @@ mod tests {
             .evaluate(&default_ctx(), &long_input())
             .unwrap()
             .unwrap();
-        assert!(
-            sig.filters_passed
-                .contains(&"screening_bullish".to_string())
-        );
-        assert!(
-            sig.filters_passed
-                .contains(&"confirmation_bullish_or_neutral".to_string())
-        );
-        assert!(
-            sig.filters_passed
-                .contains(&"pullback_near_vwap_or_ema21".to_string())
-        );
-        assert!(
-            sig.filters_passed
-                .contains(&"reclaim_above_ema8_or_vwap".to_string())
-        );
+        assert!(sig
+            .filters_passed
+            .contains(&"screening_bullish".to_string()));
+        assert!(sig
+            .filters_passed
+            .contains(&"confirmation_bullish_or_neutral".to_string()));
+        assert!(sig
+            .filters_passed
+            .contains(&"pullback_near_vwap_or_ema21".to_string()));
+        assert!(sig
+            .filters_passed
+            .contains(&"reclaim_above_ema8_or_vwap".to_string()));
         assert!(sig.filters_passed.contains(&"atr_valid".to_string()));
-        assert!(
-            sig.filters_passed
-                .contains(&"volume_acceptable".to_string())
-        );
+        assert!(sig
+            .filters_passed
+            .contains(&"volume_acceptable".to_string()));
     }
 
     #[test]
@@ -545,27 +540,22 @@ mod tests {
             .evaluate(&default_ctx(), &short_input())
             .unwrap()
             .unwrap();
-        assert!(
-            sig.filters_passed
-                .contains(&"screening_bearish".to_string())
-        );
-        assert!(
-            sig.filters_passed
-                .contains(&"confirmation_bearish_or_neutral".to_string())
-        );
-        assert!(
-            sig.filters_passed
-                .contains(&"pullback_near_vwap_or_ema21".to_string())
-        );
-        assert!(
-            sig.filters_passed
-                .contains(&"reject_below_ema8_or_vwap".to_string())
-        );
+        assert!(sig
+            .filters_passed
+            .contains(&"screening_bearish".to_string()));
+        assert!(sig
+            .filters_passed
+            .contains(&"confirmation_bearish_or_neutral".to_string()));
+        assert!(sig
+            .filters_passed
+            .contains(&"pullback_near_vwap_or_ema21".to_string()));
+        assert!(sig
+            .filters_passed
+            .contains(&"reject_below_ema8_or_vwap".to_string()));
         assert!(sig.filters_passed.contains(&"atr_valid".to_string()));
-        assert!(
-            sig.filters_passed
-                .contains(&"volume_acceptable".to_string())
-        );
+        assert!(sig
+            .filters_passed
+            .contains(&"volume_acceptable".to_string()));
     }
 
     #[test]

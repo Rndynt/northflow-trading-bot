@@ -172,8 +172,8 @@ mod tests {
         // candle 2 (period=1): TR = max(high-low=5, |115-100|=15, |110-100|=10) = 15
         let mut a = Atr::new(1).unwrap();
         a.next(candle(110.0, 90.0, 100.0)).unwrap(); // warmup candle (period=1, immediately ready)
-        // After the first candle the warmup is complete (period=1 means 1 TR needed).
-        // ATR = 20 (high-low, no prev close for first candle).
+                                                     // After the first candle the warmup is complete (period=1 means 1 TR needed).
+                                                     // ATR = 20 (high-low, no prev close for first candle).
         assert!(a.is_ready());
         // Third candle uses prev_close=100 for TR calculation.
         let v = a.next(candle(115.0, 110.0, 112.0)).unwrap();

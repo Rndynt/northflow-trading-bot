@@ -242,8 +242,8 @@ impl AttributionEngine {
 mod tests {
     use super::*;
     use crate::core::{
-        Trade, position::PositionId, side::Side, signal::SignalId, signal::StrategyId,
-        symbol::Symbol, trade::TradeExitReason, trade::TradeId,
+        position::PositionId, side::Side, signal::SignalId, signal::StrategyId, symbol::Symbol,
+        trade::TradeExitReason, trade::TradeId, Trade,
     };
 
     fn make_trade(

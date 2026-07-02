@@ -61,7 +61,7 @@ impl CandleStore {
         };
 
         let confirmation_candles = TimeframeBuilder::build(&candles_1m, confirmation_tf)?;
-        let screening_candles   = TimeframeBuilder::build(&candles_1m, screening_tf)?;
+        let screening_candles = TimeframeBuilder::build(&candles_1m, screening_tf)?;
 
         Ok(Self {
             raw_1m: candles_1m,
@@ -87,17 +87,31 @@ impl CandleStore {
     }
 
     /// Number of candles for the given timeframe role.
-    pub fn entry_len(&self) -> usize         { self.entry_candles.len() }
-    pub fn confirmation_len(&self) -> usize  { self.confirmation_candles.len() }
-    pub fn screening_len(&self) -> usize     { self.screening_candles.len() }
+    pub fn entry_len(&self) -> usize {
+        self.entry_candles.len()
+    }
+    pub fn confirmation_len(&self) -> usize {
+        self.confirmation_candles.len()
+    }
+    pub fn screening_len(&self) -> usize {
+        self.screening_candles.len()
+    }
 
     /// Number of candles for any supported timeframe (by value).
     /// Returns 0 for unsupported timeframes.
     pub fn len(&self, tf: Timeframe) -> usize {
-        if tf == self.entry_tf        { return self.entry_candles.len(); }
-        if tf == self.confirmation_tf { return self.confirmation_candles.len(); }
-        if tf == self.screening_tf    { return self.screening_candles.len(); }
-        if tf == Timeframe::OneMinute { return self.raw_1m.len(); }
+        if tf == self.entry_tf {
+            return self.entry_candles.len();
+        }
+        if tf == self.confirmation_tf {
+            return self.confirmation_candles.len();
+        }
+        if tf == self.screening_tf {
+            return self.screening_candles.len();
+        }
+        if tf == Timeframe::OneMinute {
+            return self.raw_1m.len();
+        }
         0
     }
 
@@ -112,7 +126,14 @@ mod tests {
     use super::*;
 
     fn make_candle(ts_ms: i64) -> Candle {
-        Candle { timestamp: ts_ms, open: 100.0, high: 110.0, low: 90.0, close: 105.0, volume: 10.0 }
+        Candle {
+            timestamp: ts_ms,
+            open: 100.0,
+            high: 110.0,
+            low: 90.0,
+            close: 105.0,
+            volume: 10.0,
+        }
     }
 
     fn fifteen_1m() -> Vec<Candle> {
@@ -139,13 +160,14 @@ mod tests {
             Timeframe::FiveMinute,
             Timeframe::FifteenMinute,
             Timeframe::OneHour,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(s.entry_tf, Timeframe::FiveMinute);
         assert_eq!(s.confirmation_tf, Timeframe::FifteenMinute);
         assert_eq!(s.screening_tf, Timeframe::OneHour);
-        assert_eq!(s.entry_len(), 12);     // 60/5
+        assert_eq!(s.entry_len(), 12); // 60/5
         assert_eq!(s.confirmation_len(), 4); // 60/15
-        assert_eq!(s.screening_len(), 1);   // 60/60
+        assert_eq!(s.screening_len(), 1); // 60/60
     }
 
     #[test]
@@ -164,7 +186,8 @@ mod tests {
             Timeframe::FiveMinute,
             Timeframe::FiveMinute,
             Timeframe::FifteenMinute,
-        ).unwrap_err();
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("entry_timeframe"));
     }
 
@@ -175,7 +198,8 @@ mod tests {
             Timeframe::OneMinute,
             Timeframe::FifteenMinute,
             Timeframe::FiveMinute,
-        ).unwrap_err();
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("confirmation_timeframe"));
     }
 }

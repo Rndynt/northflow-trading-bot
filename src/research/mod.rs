@@ -642,23 +642,33 @@ fn print_data_quality(cfg: &ResearchConfig, symbol: &str, csv_path: &Path) -> bo
     let quality = &load_result.quality;
     let entry_tf = match crate::core::Timeframe::from_str(&cfg.entry_timeframe) {
         Ok(tf) => tf,
-        Err(e) => { println!("  Invalid entry_timeframe: {e}"); return false; }
-    };
-    let confirmation_tf = match crate::core::Timeframe::from_str(&cfg.confirmation_timeframe) {
-        Ok(tf) => tf,
-        Err(e) => { println!("  Invalid confirmation_timeframe: {e}"); return false; }
-    };
-    let screening_tf = match crate::core::Timeframe::from_str(&cfg.screening_timeframe) {
-        Ok(tf) => tf,
-        Err(e) => { println!("  Invalid screening_timeframe: {e}"); return false; }
-    };
-    let store = match CandleStore::build(load_result.candles, entry_tf, confirmation_tf, screening_tf) {
-        Ok(s) => s,
         Err(e) => {
-            println!("  Error building candle store: {e}");
+            println!("  Invalid entry_timeframe: {e}");
             return false;
         }
     };
+    let confirmation_tf = match crate::core::Timeframe::from_str(&cfg.confirmation_timeframe) {
+        Ok(tf) => tf,
+        Err(e) => {
+            println!("  Invalid confirmation_timeframe: {e}");
+            return false;
+        }
+    };
+    let screening_tf = match crate::core::Timeframe::from_str(&cfg.screening_timeframe) {
+        Ok(tf) => tf,
+        Err(e) => {
+            println!("  Invalid screening_timeframe: {e}");
+            return false;
+        }
+    };
+    let store =
+        match CandleStore::build(load_result.candles, entry_tf, confirmation_tf, screening_tf) {
+            Ok(s) => s,
+            Err(e) => {
+                println!("  Error building candle store: {e}");
+                return false;
+            }
+        };
 
     let dup_count = quality
         .issues

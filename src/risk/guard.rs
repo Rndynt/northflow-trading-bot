@@ -374,7 +374,7 @@ mod tests {
         // Set expected_reward_bps very low so net edge ≤ 0
         let mut sig = valid_signal();
         sig.expected_reward_bps = 1.0; // far below any reasonable cost
-        // keep RR ≥ 1.5
+                                       // keep RR ≥ 1.5
         let a = RiskEngine::assess(
             &default_risk_config(),
             &default_cost_config(),
@@ -383,10 +383,9 @@ mod tests {
         )
         .unwrap();
         assert!(!a.approved);
-        assert!(
-            a.failed
-                .contains(&"expected_net_edge_not_positive".to_string())
-        );
+        assert!(a
+            .failed
+            .contains(&"expected_net_edge_not_positive".to_string()));
     }
 
     #[test]

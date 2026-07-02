@@ -21,7 +21,7 @@
 
 use crate::config::V2Config;
 use crate::core::{NorthflowError, Side, Signal, SignalId, StrategyId};
-use crate::strategy::regime::{MarketRegime, classify_screening_regime};
+use crate::strategy::regime::{classify_screening_regime, MarketRegime};
 use crate::strategy::traits::{MultiTimeframeInput, Strategy, StrategyContext};
 
 // ── Public strategy struct ────────────────────────────────────────────────────
@@ -288,7 +288,7 @@ fn make_signal_id(index: u64) -> SignalId {
 #[cfg(test)]
 mod tests {
     use super::*;
-        use crate::core::Timeframe;
+    use crate::core::Timeframe;
     use crate::core::{Candle, Symbol};
     use crate::indicators::IndicatorSnapshot;
     use crate::strategy::traits::{MultiTimeframeInput, StrategyContext};
@@ -671,33 +671,27 @@ mod tests {
             .evaluate(&default_ctx(), &long_input())
             .unwrap()
             .unwrap();
-        assert!(
-            sig.filters_passed
-                .contains(&"screening_bullish".to_string())
-        );
-        assert!(
-            sig.filters_passed
-                .contains(&"confirmation_bullish".to_string())
-        );
+        assert!(sig
+            .filters_passed
+            .contains(&"screening_bullish".to_string()));
+        assert!(sig
+            .filters_passed
+            .contains(&"confirmation_bullish".to_string()));
         assert!(sig.filters_passed.contains(&"ema_ribbon_long".to_string()));
         assert!(sig.filters_passed.contains(&"atr_bps_in_range".to_string()));
-        assert!(
-            sig.filters_passed
-                .contains(&"near_vwap_or_ema21".to_string())
-        );
+        assert!(sig
+            .filters_passed
+            .contains(&"near_vwap_or_ema21".to_string()));
         assert!(sig.filters_passed.contains(&"volume_ratio_ok".to_string()));
-        assert!(
-            sig.filters_passed
-                .contains(&"expected_reward_ok".to_string())
-        );
-        assert!(
-            sig.filters_passed
-                .contains(&"expected_net_edge_ok".to_string())
-        );
-        assert!(
-            sig.filters_passed
-                .contains(&"direction_enabled".to_string())
-        );
+        assert!(sig
+            .filters_passed
+            .contains(&"expected_reward_ok".to_string()));
+        assert!(sig
+            .filters_passed
+            .contains(&"expected_net_edge_ok".to_string()));
+        assert!(sig
+            .filters_passed
+            .contains(&"direction_enabled".to_string()));
         assert!(sig.filters_passed.contains(&"confidence_ok".to_string()));
     }
 
