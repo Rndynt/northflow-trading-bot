@@ -1,0 +1,2 @@
+key,trades,wins,losses,win_rate,net_pnl,gross_pnl,total_fee,total_slippage,avg_net_pnl,avg_expected_edge_bps,avg_actual_edge_bps,avg_bars_held
+vwap_reclaim_short_v1,308,74,234,24.025974,-3299.342953,-725.301511,1150.193751,1423.847691,-10.712152,35.247609,-22.167822,4.980519
