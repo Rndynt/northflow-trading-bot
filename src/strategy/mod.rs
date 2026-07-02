@@ -23,6 +23,7 @@ pub mod screened_vwap_scalp;
 pub mod screened_vwap_scalp_v2;
 pub mod traits;
 pub mod vwap_reclaim_short;
+pub mod vwap_reclaim_short_v2;
 
 pub use ema_trend_pullback::EmaTrendPullbackV1;
 pub use regime::{classify_screening_regime, MarketRegime};
@@ -30,3 +31,4 @@ pub use screened_vwap_scalp::ScreenedVwapScalp;
 pub use screened_vwap_scalp_v2::ScreenedVwapScalpV2;
 pub use traits::{MultiTimeframeInput, Strategy, StrategyContext};
 pub use vwap_reclaim_short::VwapReclaimShortV1;
+pub use vwap_reclaim_short_v2::VwapReclaimShortV2;

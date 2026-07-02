@@ -1,0 +1,15 @@
+{
+"total_trades": 0,
+"win_rate": 0.000000,
+"net_pnl": 0.000000,
+"gross_pnl": 0.000000,
+"total_fee": 0.000000,
+"total_slippage": 0.000000,
+"profit_factor": 0.000000,
+"expectancy": 0.000000,
+"avg_win": 0.000000,
+"avg_loss": 0.000000,
+"max_drawdown": 0.000000,
+"max_consecutive_losses": 0,
+"avg_trade_duration": 0.000000
+}

@@ -137,6 +137,66 @@ pub struct VwapReclaimShortConfig {
     pub cooldown_bars: u64,
 }
 
+/// Configuration for the vwap_reclaim_short_v2 strategy.
+#[derive(Debug, Clone)]
+pub struct VwapReclaimShortV2Config {
+    pub lookback_bars: usize,
+    pub breakout_window_bars: usize,
+    pub retest_tolerance_atr: f64,
+    pub max_extension_atr: f64,
+    pub min_volume_ratio: f64,
+    pub min_atr_bps: f64,
+    pub max_atr_bps: f64,
+    pub min_reward_risk: f64,
+    pub min_expected_reward_bps: f64,
+    pub min_expected_net_edge_bps: f64,
+    pub cooldown_bars: u64,
+    pub max_anchor_range_atr: f64,
+    pub min_breakdown_close_atr: f64,
+    pub max_breakdown_close_atr: f64,
+    pub require_breakdown_volume_expansion: bool,
+    pub min_breakdown_volume_ratio: f64,
+    pub stop_mode: String,
+    pub sl_atr_multiple: f64,
+    pub tp_atr_multiple: f64,
+    pub structure_stop_buffer_atr: f64,
+    pub max_structure_stop_atr: f64,
+    pub require_current_bearish_body: bool,
+    pub min_current_body_ratio: f64,
+    pub min_upper_wick_rejection_ratio: f64,
+}
+
+impl Default for VwapReclaimShortV2Config {
+    fn default() -> Self {
+        Self {
+            lookback_bars: 80,
+            breakout_window_bars: 12,
+            retest_tolerance_atr: 0.20,
+            max_extension_atr: 0.60,
+            min_volume_ratio: 1.0,
+            min_atr_bps: 8.0,
+            max_atr_bps: 35.0,
+            min_reward_risk: 1.8,
+            min_expected_reward_bps: 20.0,
+            min_expected_net_edge_bps: 6.0,
+            cooldown_bars: 6,
+            max_anchor_range_atr: 6.0,
+            min_breakdown_close_atr: 0.15,
+            max_breakdown_close_atr: 1.20,
+            require_breakdown_volume_expansion: true,
+            min_breakdown_volume_ratio: 1.2,
+            stop_mode: "structure".to_string(),
+            sl_atr_multiple: 1.2,
+            tp_atr_multiple: 2.2,
+            structure_stop_buffer_atr: 0.20,
+            max_structure_stop_atr: 2.0,
+            require_current_bearish_body: true,
+            min_current_body_ratio: 0.35,
+            min_upper_wick_rejection_ratio: 0.15,
+        }
+    }
+}
+
 impl Default for VwapReclaimShortConfig {
     fn default() -> Self {
         Self {
@@ -249,6 +309,30 @@ pub struct ResearchConfig {
     pub vrs_min_expected_reward_bps: f64,
     pub vrs_min_expected_net_edge_bps: f64,
     pub vrs_cooldown_bars: u64,
+    pub vrs2_lookback_bars: usize,
+    pub vrs2_breakout_window_bars: usize,
+    pub vrs2_retest_tolerance_atr: f64,
+    pub vrs2_max_extension_atr: f64,
+    pub vrs2_min_volume_ratio: f64,
+    pub vrs2_min_atr_bps: f64,
+    pub vrs2_max_atr_bps: f64,
+    pub vrs2_min_reward_risk: f64,
+    pub vrs2_min_expected_reward_bps: f64,
+    pub vrs2_min_expected_net_edge_bps: f64,
+    pub vrs2_cooldown_bars: u64,
+    pub vrs2_max_anchor_range_atr: f64,
+    pub vrs2_min_breakdown_close_atr: f64,
+    pub vrs2_max_breakdown_close_atr: f64,
+    pub vrs2_require_breakdown_volume_expansion: bool,
+    pub vrs2_min_breakdown_volume_ratio: f64,
+    pub vrs2_stop_mode: String,
+    pub vrs2_sl_atr_multiple: f64,
+    pub vrs2_tp_atr_multiple: f64,
+    pub vrs2_structure_stop_buffer_atr: f64,
+    pub vrs2_max_structure_stop_atr: f64,
+    pub vrs2_require_current_bearish_body: bool,
+    pub vrs2_min_current_body_ratio: f64,
+    pub vrs2_min_upper_wick_rejection_ratio: f64,
 }
 
 impl Default for ResearchConfig {
@@ -329,6 +413,30 @@ impl Default for ResearchConfig {
             vrs_min_expected_reward_bps: 25.0,
             vrs_min_expected_net_edge_bps: 8.0,
             vrs_cooldown_bars: 0,
+            vrs2_lookback_bars: 80,
+            vrs2_breakout_window_bars: 12,
+            vrs2_retest_tolerance_atr: 0.20,
+            vrs2_max_extension_atr: 0.60,
+            vrs2_min_volume_ratio: 1.0,
+            vrs2_min_atr_bps: 8.0,
+            vrs2_max_atr_bps: 35.0,
+            vrs2_min_reward_risk: 1.8,
+            vrs2_min_expected_reward_bps: 20.0,
+            vrs2_min_expected_net_edge_bps: 6.0,
+            vrs2_cooldown_bars: 6,
+            vrs2_max_anchor_range_atr: 6.0,
+            vrs2_min_breakdown_close_atr: 0.15,
+            vrs2_max_breakdown_close_atr: 1.20,
+            vrs2_require_breakdown_volume_expansion: true,
+            vrs2_min_breakdown_volume_ratio: 1.2,
+            vrs2_stop_mode: "structure".to_string(),
+            vrs2_sl_atr_multiple: 1.2,
+            vrs2_tp_atr_multiple: 2.2,
+            vrs2_structure_stop_buffer_atr: 0.20,
+            vrs2_max_structure_stop_atr: 2.0,
+            vrs2_require_current_bearish_body: true,
+            vrs2_min_current_body_ratio: 0.35,
+            vrs2_min_upper_wick_rejection_ratio: 0.15,
         }
     }
 }
@@ -528,6 +636,82 @@ impl ResearchConfig {
                 "vrs_cooldown_bars" => {
                     cfg.vrs_cooldown_bars = value.parse().unwrap_or(cfg.vrs_cooldown_bars)
                 }
+                "vrs2_lookback_bars" => {
+                    cfg.vrs2_lookback_bars = value.parse().unwrap_or(cfg.vrs2_lookback_bars)
+                }
+                "vrs2_breakout_window_bars" => {
+                    cfg.vrs2_breakout_window_bars =
+                        value.parse().unwrap_or(cfg.vrs2_breakout_window_bars)
+                }
+                "vrs2_retest_tolerance_atr" => {
+                    cfg.vrs2_retest_tolerance_atr = parse_f64(value, cfg.vrs2_retest_tolerance_atr)
+                }
+                "vrs2_max_extension_atr" => {
+                    cfg.vrs2_max_extension_atr = parse_f64(value, cfg.vrs2_max_extension_atr)
+                }
+                "vrs2_min_volume_ratio" => {
+                    cfg.vrs2_min_volume_ratio = parse_f64(value, cfg.vrs2_min_volume_ratio)
+                }
+                "vrs2_min_atr_bps" => cfg.vrs2_min_atr_bps = parse_f64(value, cfg.vrs2_min_atr_bps),
+                "vrs2_max_atr_bps" => cfg.vrs2_max_atr_bps = parse_f64(value, cfg.vrs2_max_atr_bps),
+                "vrs2_min_reward_risk" => {
+                    cfg.vrs2_min_reward_risk = parse_f64(value, cfg.vrs2_min_reward_risk)
+                }
+                "vrs2_min_expected_reward_bps" => {
+                    cfg.vrs2_min_expected_reward_bps =
+                        parse_f64(value, cfg.vrs2_min_expected_reward_bps)
+                }
+                "vrs2_min_expected_net_edge_bps" => {
+                    cfg.vrs2_min_expected_net_edge_bps =
+                        parse_f64(value, cfg.vrs2_min_expected_net_edge_bps)
+                }
+                "vrs2_cooldown_bars" => {
+                    cfg.vrs2_cooldown_bars = value.parse().unwrap_or(cfg.vrs2_cooldown_bars)
+                }
+                "vrs2_max_anchor_range_atr" => {
+                    cfg.vrs2_max_anchor_range_atr = parse_f64(value, cfg.vrs2_max_anchor_range_atr)
+                }
+                "vrs2_min_breakdown_close_atr" => {
+                    cfg.vrs2_min_breakdown_close_atr =
+                        parse_f64(value, cfg.vrs2_min_breakdown_close_atr)
+                }
+                "vrs2_max_breakdown_close_atr" => {
+                    cfg.vrs2_max_breakdown_close_atr =
+                        parse_f64(value, cfg.vrs2_max_breakdown_close_atr)
+                }
+                "vrs2_require_breakdown_volume_expansion" => {
+                    cfg.vrs2_require_breakdown_volume_expansion = value == "true"
+                }
+                "vrs2_min_breakdown_volume_ratio" => {
+                    cfg.vrs2_min_breakdown_volume_ratio =
+                        parse_f64(value, cfg.vrs2_min_breakdown_volume_ratio)
+                }
+                "vrs2_stop_mode" => cfg.vrs2_stop_mode = value.to_string(),
+                "vrs2_sl_atr_multiple" => {
+                    cfg.vrs2_sl_atr_multiple = parse_f64(value, cfg.vrs2_sl_atr_multiple)
+                }
+                "vrs2_tp_atr_multiple" => {
+                    cfg.vrs2_tp_atr_multiple = parse_f64(value, cfg.vrs2_tp_atr_multiple)
+                }
+                "vrs2_structure_stop_buffer_atr" => {
+                    cfg.vrs2_structure_stop_buffer_atr =
+                        parse_f64(value, cfg.vrs2_structure_stop_buffer_atr)
+                }
+                "vrs2_max_structure_stop_atr" => {
+                    cfg.vrs2_max_structure_stop_atr =
+                        parse_f64(value, cfg.vrs2_max_structure_stop_atr)
+                }
+                "vrs2_require_current_bearish_body" => {
+                    cfg.vrs2_require_current_bearish_body = value == "true"
+                }
+                "vrs2_min_current_body_ratio" => {
+                    cfg.vrs2_min_current_body_ratio =
+                        parse_f64(value, cfg.vrs2_min_current_body_ratio)
+                }
+                "vrs2_min_upper_wick_rejection_ratio" => {
+                    cfg.vrs2_min_upper_wick_rejection_ratio =
+                        parse_f64(value, cfg.vrs2_min_upper_wick_rejection_ratio)
+                }
                 _ => {}
             }
         }
@@ -591,6 +775,36 @@ impl ResearchConfig {
         }
     }
 
+    /// Extract a `VwapReclaimShortV2Config` from the vrs2_* fields of this `ResearchConfig`.
+    pub fn vrs2_config(&self) -> VwapReclaimShortV2Config {
+        VwapReclaimShortV2Config {
+            lookback_bars: self.vrs2_lookback_bars,
+            breakout_window_bars: self.vrs2_breakout_window_bars,
+            retest_tolerance_atr: self.vrs2_retest_tolerance_atr,
+            max_extension_atr: self.vrs2_max_extension_atr,
+            min_volume_ratio: self.vrs2_min_volume_ratio,
+            min_atr_bps: self.vrs2_min_atr_bps,
+            max_atr_bps: self.vrs2_max_atr_bps,
+            min_reward_risk: self.vrs2_min_reward_risk,
+            min_expected_reward_bps: self.vrs2_min_expected_reward_bps,
+            min_expected_net_edge_bps: self.vrs2_min_expected_net_edge_bps,
+            cooldown_bars: self.vrs2_cooldown_bars,
+            max_anchor_range_atr: self.vrs2_max_anchor_range_atr,
+            min_breakdown_close_atr: self.vrs2_min_breakdown_close_atr,
+            max_breakdown_close_atr: self.vrs2_max_breakdown_close_atr,
+            require_breakdown_volume_expansion: self.vrs2_require_breakdown_volume_expansion,
+            min_breakdown_volume_ratio: self.vrs2_min_breakdown_volume_ratio,
+            stop_mode: self.vrs2_stop_mode.clone(),
+            sl_atr_multiple: self.vrs2_sl_atr_multiple,
+            tp_atr_multiple: self.vrs2_tp_atr_multiple,
+            structure_stop_buffer_atr: self.vrs2_structure_stop_buffer_atr,
+            max_structure_stop_atr: self.vrs2_max_structure_stop_atr,
+            require_current_bearish_body: self.vrs2_require_current_bearish_body,
+            min_current_body_ratio: self.vrs2_min_current_body_ratio,
+            min_upper_wick_rejection_ratio: self.vrs2_min_upper_wick_rejection_ratio,
+        }
+    }
+
     /// Returns the cooldown_bars for the given strategy_id.
     ///
     /// - `screened_vwap_scalp_v2`   → `v2_cooldown_bars`
@@ -601,6 +815,7 @@ impl ResearchConfig {
             "screened_vwap_scalp_v2" => self.v2_cooldown_bars,
             "ema_trend_pullback_v1" => self.etp_cooldown_bars,
             "vwap_reclaim_short_v1" => self.vrs_cooldown_bars,
+            "vwap_reclaim_short_v2" => self.vrs2_cooldown_bars,
             _ => 0,
         }
     }
@@ -639,11 +854,14 @@ impl ResearchConfig {
             "vwap_reclaim_short_v1" => {
                 return self.validate_vrs_config();
             }
+            "vwap_reclaim_short_v2" => {
+                return self.validate_vrs2_config();
+            }
             other => {
                 return Err(NorthflowError::ConfigError(format!(
                     "unknown strategy_id: '{other}'. \
                      Valid values: 'screened_vwap_scalp', 'screened_vwap_scalp_v2', \
-                     'ema_trend_pullback_v1', 'vwap_reclaim_short_v1'"
+                     'ema_trend_pullback_v1', 'vwap_reclaim_short_v1', 'vwap_reclaim_short_v2'"
                 )));
             }
         }
@@ -846,6 +1064,88 @@ impl ResearchConfig {
         Ok(())
     }
 
+    /// Validate vwap_reclaim_short_v2-specific config fields.
+    pub fn validate_vrs2_config(&self) -> Result<(), NorthflowError> {
+        if self.vrs2_lookback_bars == 0 || self.vrs2_breakout_window_bars == 0 {
+            return Err(NorthflowError::ConfigError(
+                "vrs2_lookback_bars and vrs2_breakout_window_bars must be > 0".to_string(),
+            ));
+        }
+        if self.entry_lookback_bars < self.vrs2_lookback_bars + self.vrs2_breakout_window_bars {
+            return Err(NorthflowError::ConfigError(format!(
+                "entry_lookback_bars ({}) must be >= vrs2_lookback_bars + vrs2_breakout_window_bars ({})",
+                self.entry_lookback_bars,
+                self.vrs2_lookback_bars + self.vrs2_breakout_window_bars
+            )));
+        }
+        match self.vrs2_stop_mode.as_str() {
+            "atr" | "structure" => {}
+            other => {
+                return Err(NorthflowError::ConfigError(format!(
+                    "unknown vrs2_stop_mode: '{other}'. Valid values: 'atr', 'structure'"
+                )));
+            }
+        }
+        validate_nonnegative_finite("vrs2_retest_tolerance_atr", self.vrs2_retest_tolerance_atr)?;
+        validate_positive_finite("vrs2_max_extension_atr", self.vrs2_max_extension_atr)?;
+        validate_nonnegative_finite("vrs2_min_volume_ratio", self.vrs2_min_volume_ratio)?;
+        validate_nonnegative_finite("vrs2_min_atr_bps", self.vrs2_min_atr_bps)?;
+        if !self.vrs2_max_atr_bps.is_finite() || self.vrs2_max_atr_bps <= self.vrs2_min_atr_bps {
+            return Err(NorthflowError::ConfigError(
+                "vrs2_max_atr_bps must be finite and > vrs2_min_atr_bps".to_string(),
+            ));
+        }
+        validate_positive_finite("vrs2_max_anchor_range_atr", self.vrs2_max_anchor_range_atr)?;
+        validate_nonnegative_finite(
+            "vrs2_min_breakdown_close_atr",
+            self.vrs2_min_breakdown_close_atr,
+        )?;
+        if !self.vrs2_max_breakdown_close_atr.is_finite()
+            || self.vrs2_max_breakdown_close_atr < self.vrs2_min_breakdown_close_atr
+        {
+            return Err(NorthflowError::ConfigError(
+                "vrs2_max_breakdown_close_atr must be finite and >= vrs2_min_breakdown_close_atr"
+                    .to_string(),
+            ));
+        }
+        validate_nonnegative_finite(
+            "vrs2_min_breakdown_volume_ratio",
+            self.vrs2_min_breakdown_volume_ratio,
+        )?;
+        validate_positive_finite("vrs2_sl_atr_multiple", self.vrs2_sl_atr_multiple)?;
+        validate_positive_finite("vrs2_tp_atr_multiple", self.vrs2_tp_atr_multiple)?;
+        validate_nonnegative_finite(
+            "vrs2_structure_stop_buffer_atr",
+            self.vrs2_structure_stop_buffer_atr,
+        )?;
+        validate_positive_finite(
+            "vrs2_max_structure_stop_atr",
+            self.vrs2_max_structure_stop_atr,
+        )?;
+        if !self.vrs2_min_reward_risk.is_finite() || self.vrs2_min_reward_risk < 1.0 {
+            return Err(NorthflowError::ConfigError(
+                "vrs2_min_reward_risk must be finite and >= 1.0".to_string(),
+            ));
+        }
+        validate_nonnegative_finite(
+            "vrs2_min_expected_reward_bps",
+            self.vrs2_min_expected_reward_bps,
+        )?;
+        validate_nonnegative_finite(
+            "vrs2_min_expected_net_edge_bps",
+            self.vrs2_min_expected_net_edge_bps,
+        )?;
+        validate_nonnegative_finite(
+            "vrs2_min_current_body_ratio",
+            self.vrs2_min_current_body_ratio,
+        )?;
+        validate_nonnegative_finite(
+            "vrs2_min_upper_wick_rejection_ratio",
+            self.vrs2_min_upper_wick_rejection_ratio,
+        )?;
+        Ok(())
+    }
+
     /// Validate strategy runner config: run mode, strategy list, duplicates, reserved modes.
     ///
     /// Must be called after `validate_strategy_config()`.
@@ -883,7 +1183,8 @@ impl ResearchConfig {
                 "screened_vwap_scalp"
                 | "screened_vwap_scalp_v2"
                 | "ema_trend_pullback_v1"
-                | "vwap_reclaim_short_v1" => {}
+                | "vwap_reclaim_short_v1"
+                | "vwap_reclaim_short_v2" => {}
                 other => {
                     return Err(NorthflowError::ConfigError(format!(
                         "unknown strategy in strategies list: '{other}'. \
