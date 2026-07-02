@@ -4,6 +4,7 @@
 //!   screened_vwap_scalp    — original deterministic strategy
 //!   screened_vwap_scalp_v2 — stricter, cost-aware research variant
 //!   ema_trend_pullback_v1  — multi-timeframe EMA trend pullback candidate
+//!   vwap_reclaim_trend_v1 — dedicated VWAP reclaim trend candidate
 //!
 //! Emits Signal only. No orders, no risk sizing, no backtest execution.
 //!
@@ -22,9 +23,11 @@ pub mod regime;
 pub mod screened_vwap_scalp;
 pub mod screened_vwap_scalp_v2;
 pub mod traits;
+pub mod vwap_reclaim_trend;
 
 pub use ema_trend_pullback::EmaTrendPullbackV1;
 pub use regime::{classify_screening_regime, MarketRegime};
 pub use screened_vwap_scalp::ScreenedVwapScalp;
 pub use screened_vwap_scalp_v2::ScreenedVwapScalpV2;
 pub use traits::{MultiTimeframeInput, Strategy, StrategyContext};
+pub use vwap_reclaim_trend::VwapReclaimTrendV1;
