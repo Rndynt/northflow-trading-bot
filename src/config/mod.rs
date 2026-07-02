@@ -117,6 +117,46 @@ impl Default for EtpConfig {
     }
 }
 
+// ── VwapReclaimShortConfig ───────────────────────────────────────────────────
+
+/// Configuration for the vwap_reclaim_short_v1 strategy.
+#[derive(Debug, Clone)]
+pub struct VwapReclaimShortConfig {
+    pub lookback_bars: usize,
+    pub breakout_window_bars: usize,
+    pub retest_tolerance_atr: f64,
+    pub max_extension_atr: f64,
+    pub min_volume_ratio: f64,
+    pub min_atr_bps: f64,
+    pub max_atr_bps: f64,
+    pub sl_atr_multiple: f64,
+    pub tp_atr_multiple: f64,
+    pub min_reward_risk: f64,
+    pub min_expected_reward_bps: f64,
+    pub min_expected_net_edge_bps: f64,
+    pub cooldown_bars: u64,
+}
+
+impl Default for VwapReclaimShortConfig {
+    fn default() -> Self {
+        Self {
+            lookback_bars: 50,
+            breakout_window_bars: 8,
+            retest_tolerance_atr: 0.25,
+            max_extension_atr: 0.80,
+            min_volume_ratio: 1.0,
+            min_atr_bps: 8.0,
+            max_atr_bps: 45.0,
+            sl_atr_multiple: 1.0,
+            tp_atr_multiple: 2.5,
+            min_reward_risk: 2.0,
+            min_expected_reward_bps: 25.0,
+            min_expected_net_edge_bps: 8.0,
+            cooldown_bars: 0,
+        }
+    }
+}
+
 // ── ResearchConfig ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
@@ -195,6 +235,20 @@ pub struct ResearchConfig {
     pub etp_min_expected_net_edge_bps: f64,
     pub etp_min_volume_ratio: f64,
     pub etp_cooldown_bars: u64,
+    // vwap_reclaim_short_v1 filters
+    pub vrs_lookback_bars: usize,
+    pub vrs_breakout_window_bars: usize,
+    pub vrs_retest_tolerance_atr: f64,
+    pub vrs_max_extension_atr: f64,
+    pub vrs_min_volume_ratio: f64,
+    pub vrs_min_atr_bps: f64,
+    pub vrs_max_atr_bps: f64,
+    pub vrs_sl_atr_multiple: f64,
+    pub vrs_tp_atr_multiple: f64,
+    pub vrs_min_reward_risk: f64,
+    pub vrs_min_expected_reward_bps: f64,
+    pub vrs_min_expected_net_edge_bps: f64,
+    pub vrs_cooldown_bars: u64,
 }
 
 impl Default for ResearchConfig {
@@ -262,6 +316,19 @@ impl Default for ResearchConfig {
             etp_min_expected_net_edge_bps: 8.0,
             etp_min_volume_ratio: 1.0,
             etp_cooldown_bars: 10,
+            vrs_lookback_bars: 50,
+            vrs_breakout_window_bars: 8,
+            vrs_retest_tolerance_atr: 0.25,
+            vrs_max_extension_atr: 0.80,
+            vrs_min_volume_ratio: 1.0,
+            vrs_min_atr_bps: 8.0,
+            vrs_max_atr_bps: 45.0,
+            vrs_sl_atr_multiple: 1.0,
+            vrs_tp_atr_multiple: 2.5,
+            vrs_min_reward_risk: 2.0,
+            vrs_min_expected_reward_bps: 25.0,
+            vrs_min_expected_net_edge_bps: 8.0,
+            vrs_cooldown_bars: 0,
         }
     }
 }
@@ -423,6 +490,44 @@ impl ResearchConfig {
                 "etp_cooldown_bars" => {
                     cfg.etp_cooldown_bars = value.parse().unwrap_or(cfg.etp_cooldown_bars)
                 }
+                "vrs_lookback_bars" => {
+                    cfg.vrs_lookback_bars = value.parse().unwrap_or(cfg.vrs_lookback_bars)
+                }
+                "vrs_breakout_window_bars" => {
+                    cfg.vrs_breakout_window_bars =
+                        value.parse().unwrap_or(cfg.vrs_breakout_window_bars)
+                }
+                "vrs_retest_tolerance_atr" => {
+                    cfg.vrs_retest_tolerance_atr = parse_f64(value, cfg.vrs_retest_tolerance_atr)
+                }
+                "vrs_max_extension_atr" => {
+                    cfg.vrs_max_extension_atr = parse_f64(value, cfg.vrs_max_extension_atr)
+                }
+                "vrs_min_volume_ratio" => {
+                    cfg.vrs_min_volume_ratio = parse_f64(value, cfg.vrs_min_volume_ratio)
+                }
+                "vrs_min_atr_bps" => cfg.vrs_min_atr_bps = parse_f64(value, cfg.vrs_min_atr_bps),
+                "vrs_max_atr_bps" => cfg.vrs_max_atr_bps = parse_f64(value, cfg.vrs_max_atr_bps),
+                "vrs_sl_atr_multiple" => {
+                    cfg.vrs_sl_atr_multiple = parse_f64(value, cfg.vrs_sl_atr_multiple)
+                }
+                "vrs_tp_atr_multiple" => {
+                    cfg.vrs_tp_atr_multiple = parse_f64(value, cfg.vrs_tp_atr_multiple)
+                }
+                "vrs_min_reward_risk" => {
+                    cfg.vrs_min_reward_risk = parse_f64(value, cfg.vrs_min_reward_risk)
+                }
+                "vrs_min_expected_reward_bps" => {
+                    cfg.vrs_min_expected_reward_bps =
+                        parse_f64(value, cfg.vrs_min_expected_reward_bps)
+                }
+                "vrs_min_expected_net_edge_bps" => {
+                    cfg.vrs_min_expected_net_edge_bps =
+                        parse_f64(value, cfg.vrs_min_expected_net_edge_bps)
+                }
+                "vrs_cooldown_bars" => {
+                    cfg.vrs_cooldown_bars = value.parse().unwrap_or(cfg.vrs_cooldown_bars)
+                }
                 _ => {}
             }
         }
@@ -467,6 +572,25 @@ impl ResearchConfig {
         }
     }
 
+    /// Extract a `VwapReclaimShortConfig` from the vrs_* fields of this `ResearchConfig`.
+    pub fn vrs_config(&self) -> VwapReclaimShortConfig {
+        VwapReclaimShortConfig {
+            lookback_bars: self.vrs_lookback_bars,
+            breakout_window_bars: self.vrs_breakout_window_bars,
+            retest_tolerance_atr: self.vrs_retest_tolerance_atr,
+            max_extension_atr: self.vrs_max_extension_atr,
+            min_volume_ratio: self.vrs_min_volume_ratio,
+            min_atr_bps: self.vrs_min_atr_bps,
+            max_atr_bps: self.vrs_max_atr_bps,
+            sl_atr_multiple: self.vrs_sl_atr_multiple,
+            tp_atr_multiple: self.vrs_tp_atr_multiple,
+            min_reward_risk: self.vrs_min_reward_risk,
+            min_expected_reward_bps: self.vrs_min_expected_reward_bps,
+            min_expected_net_edge_bps: self.vrs_min_expected_net_edge_bps,
+            cooldown_bars: self.vrs_cooldown_bars,
+        }
+    }
+
     /// Returns the cooldown_bars for the given strategy_id.
     ///
     /// - `screened_vwap_scalp_v2`   → `v2_cooldown_bars`
@@ -476,6 +600,7 @@ impl ResearchConfig {
         match strategy_id {
             "screened_vwap_scalp_v2" => self.v2_cooldown_bars,
             "ema_trend_pullback_v1" => self.etp_cooldown_bars,
+            "vwap_reclaim_short_v1" => self.vrs_cooldown_bars,
             _ => 0,
         }
     }
@@ -511,11 +636,14 @@ impl ResearchConfig {
             "ema_trend_pullback_v1" => {
                 return self.validate_etp_config();
             }
+            "vwap_reclaim_short_v1" => {
+                return self.validate_vrs_config();
+            }
             other => {
                 return Err(NorthflowError::ConfigError(format!(
                     "unknown strategy_id: '{other}'. \
                      Valid values: 'screened_vwap_scalp', 'screened_vwap_scalp_v2', \
-                     'ema_trend_pullback_v1'"
+                     'ema_trend_pullback_v1', 'vwap_reclaim_short_v1'"
                 )));
             }
         }
@@ -672,6 +800,52 @@ impl ResearchConfig {
         Ok(())
     }
 
+    /// Validate vwap_reclaim_short_v1-specific config fields.
+    pub fn validate_vrs_config(&self) -> Result<(), NorthflowError> {
+        if self.vrs_lookback_bars == 0 {
+            return Err(NorthflowError::ConfigError(
+                "vrs_lookback_bars must be > 0".to_string(),
+            ));
+        }
+        if self.vrs_breakout_window_bars == 0 {
+            return Err(NorthflowError::ConfigError(
+                "vrs_breakout_window_bars must be > 0".to_string(),
+            ));
+        }
+        if self.entry_lookback_bars < self.vrs_lookback_bars + self.vrs_breakout_window_bars {
+            return Err(NorthflowError::ConfigError(format!(
+                "entry_lookback_bars ({}) must be >= vrs_lookback_bars + vrs_breakout_window_bars ({})",
+                self.entry_lookback_bars,
+                self.vrs_lookback_bars + self.vrs_breakout_window_bars
+            )));
+        }
+        validate_nonnegative_finite("vrs_retest_tolerance_atr", self.vrs_retest_tolerance_atr)?;
+        validate_positive_finite("vrs_max_extension_atr", self.vrs_max_extension_atr)?;
+        validate_nonnegative_finite("vrs_min_volume_ratio", self.vrs_min_volume_ratio)?;
+        validate_nonnegative_finite("vrs_min_atr_bps", self.vrs_min_atr_bps)?;
+        if !self.vrs_max_atr_bps.is_finite() || self.vrs_max_atr_bps <= self.vrs_min_atr_bps {
+            return Err(NorthflowError::ConfigError(
+                "vrs_max_atr_bps must be finite and > vrs_min_atr_bps".to_string(),
+            ));
+        }
+        validate_positive_finite("vrs_sl_atr_multiple", self.vrs_sl_atr_multiple)?;
+        validate_positive_finite("vrs_tp_atr_multiple", self.vrs_tp_atr_multiple)?;
+        if !self.vrs_min_reward_risk.is_finite() || self.vrs_min_reward_risk < 1.0 {
+            return Err(NorthflowError::ConfigError(
+                "vrs_min_reward_risk must be finite and >= 1.0".to_string(),
+            ));
+        }
+        validate_nonnegative_finite(
+            "vrs_min_expected_reward_bps",
+            self.vrs_min_expected_reward_bps,
+        )?;
+        validate_nonnegative_finite(
+            "vrs_min_expected_net_edge_bps",
+            self.vrs_min_expected_net_edge_bps,
+        )?;
+        Ok(())
+    }
+
     /// Validate strategy runner config: run mode, strategy list, duplicates, reserved modes.
     ///
     /// Must be called after `validate_strategy_config()`.
@@ -706,12 +880,15 @@ impl ResearchConfig {
         // Validate each strategy ID in strategies list.
         for s in &self.strategies {
             match s.as_str() {
-                "screened_vwap_scalp" | "screened_vwap_scalp_v2" | "ema_trend_pullback_v1" => {}
+                "screened_vwap_scalp"
+                | "screened_vwap_scalp_v2"
+                | "ema_trend_pullback_v1"
+                | "vwap_reclaim_short_v1" => {}
                 other => {
                     return Err(NorthflowError::ConfigError(format!(
                         "unknown strategy in strategies list: '{other}'. \
                          Valid values: 'screened_vwap_scalp', 'screened_vwap_scalp_v2', \
-                         'ema_trend_pullback_v1'"
+                         'ema_trend_pullback_v1', 'vwap_reclaim_short_v1'"
                     )));
                 }
             }
@@ -842,6 +1019,24 @@ impl ResearchConfig {
 
         Ok(())
     }
+}
+
+fn validate_positive_finite(name: &str, value: f64) -> Result<(), NorthflowError> {
+    if !value.is_finite() || value <= 0.0 {
+        return Err(NorthflowError::ConfigError(format!(
+            "{name} must be finite and > 0"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_nonnegative_finite(name: &str, value: f64) -> Result<(), NorthflowError> {
+    if !value.is_finite() || value < 0.0 {
+        return Err(NorthflowError::ConfigError(format!(
+            "{name} must be finite and >= 0"
+        )));
+    }
+    Ok(())
 }
 
 fn parse_historical_files(raw: &str) -> HashMap<String, Vec<PathBuf>> {
