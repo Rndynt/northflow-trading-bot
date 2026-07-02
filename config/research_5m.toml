@@ -40,6 +40,7 @@ conservative_intrabar  = true
 max_bars_held          = 48      # 48 × 5m = 4 hours max hold
 min_confidence         = 65
 entry_geometry_mode    = "reanchor_to_actual_entry"
+entry_lookback_bars = 0
 
 # ── V2 Strategy Filters (tuned for higher TFs) ───────────────────────────────
 v2_require_strict_confirmation  = true

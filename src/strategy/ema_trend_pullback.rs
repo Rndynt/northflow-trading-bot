@@ -520,6 +520,7 @@ mod tests {
         let vwap = 49_950.0_f64;
 
         MultiTimeframeInput {
+            entry_lookback: vec![],
             // low dips below ema21, close reclaims above ema21
             entry_candle: long_candle(49_985.0, 50_020.0, 49_975.0, close, 200.0),
             confirmation_candle: long_candle(49_900.0, 50_100.0, 49_850.0, 50_050.0, 150.0),
@@ -540,6 +541,7 @@ mod tests {
         let vwap = 50_050.0_f64;
 
         MultiTimeframeInput {
+            entry_lookback: vec![],
             entry_candle: short_candle(50_020.0, 50_025.0, 49_980.0, close, 200.0),
             confirmation_candle: short_candle(50_100.0, 50_150.0, 49_900.0, 49_950.0, 150.0),
             screening_candle: short_candle(50_500.0, 50_600.0, 49_800.0, 49_900.0, 500.0),

@@ -51,6 +51,7 @@ reports_dir = "reports/comparison"
 conservative_intrabar = true
 max_bars_held = 60
 entry_geometry_mode = "reanchor_to_actual_entry"
+entry_lookback_bars = 0
 
 # Strategy runner — controls how many strategies are backtested per run.
 #

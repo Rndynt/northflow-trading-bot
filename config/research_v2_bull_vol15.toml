@@ -50,5 +50,6 @@ reports_dir = "reports/v2_bull_vol15"
 conservative_intrabar = true
 max_bars_held = 60
 entry_geometry_mode = "reanchor_to_actual_entry"
+entry_lookback_bars = 0
 strategy_run_mode = "single"
 strategies = ["screened_vwap_scalp_v2"]

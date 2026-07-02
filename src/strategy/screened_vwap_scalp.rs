@@ -371,6 +371,7 @@ mod tests {
 
     fn long_input() -> MultiTimeframeInput {
         MultiTimeframeInput {
+            entry_lookback: vec![],
             entry_candle: long_entry_candle(),
             confirmation_candle: bullish_candle(),
             screening_candle: bullish_candle(),
@@ -382,6 +383,7 @@ mod tests {
 
     fn short_input() -> MultiTimeframeInput {
         MultiTimeframeInput {
+            entry_lookback: vec![],
             entry_candle: short_entry_candle(),
             confirmation_candle: bearish_candle(),
             screening_candle: bearish_candle(),
