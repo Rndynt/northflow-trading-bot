@@ -25,8 +25,6 @@
 //!
 //! No exchange calls. No LLMs. Historical simulation only.
 
-use std::path::Path;
-
 use crate::backtest::fill_model::{FillModel, OpenSimPosition};
 use crate::backtest::geometry::{adjusted_signal_for_actual_entry, EntryGeometryMode};
 use crate::backtest::metrics::{BacktestSummary, EquityPoint, Metrics};
@@ -104,21 +102,29 @@ impl BacktestEngine {
         // always returns Err, regardless of CSV presence.
         cfg.validate_strategy_config()?;
 
-        let csv_path = Path::new(&cfg.data_dir).join(format!("{symbol}.csv"));
+        let data_paths = cfg.historical_paths_for(symbol);
 
-        if !csv_path.exists() {
+        if data_paths.iter().any(|path| !path.exists()) {
             return Ok(None);
         }
 
         // Load and validate data.
-        let load_result = OhlcvLoader::load_file(&csv_path)
-            .map_err(|e| NorthflowError::DataError(e.to_string()))?;
+        let load_result = if data_paths.len() > 1 {
+            OhlcvLoader::load_files(&data_paths)
+        } else {
+            OhlcvLoader::load_file(&data_paths[0])
+        }
+        .map_err(|e| NorthflowError::DataError(e.to_string()))?;
 
         let quality = &load_result.quality;
         if quality.error_count() > 0 {
             return Err(NorthflowError::DataError(format!(
                 "data quality errors in {}: {} error(s) must be fixed before backtest",
-                csv_path.display(),
+                data_paths
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 quality.error_count()
             )));
         }

@@ -18,7 +18,7 @@
 //!     && delta % SOURCE_TIMEFRAME_MS == 0      → MissingGap (warning)
 //!   anything else (including 90_000, 150_000)  → Irregular (error)
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::core::{Candle, NorthflowError};
 use crate::market::data_quality::{DataQualityIssueKind, DataQualityReport, MissingCandleGap};
@@ -116,6 +116,101 @@ impl OhlcvLoader {
         let raw = std::fs::read_to_string(path)
             .map_err(|e| NorthflowError::DataError(format!("failed to read '{source}': {e}")))?;
         Ok(Self::load_csv(&source, &raw))
+    }
+
+    /// Load multiple 1m OHLCV CSV files from disk and merge candles in the
+    /// caller-declared file order.
+    ///
+    /// Each file is parsed with the same validation rules as `load_file`.
+    /// The merged stream is then validated without sorting: duplicate or
+    /// out-of-order timestamps across file boundaries are reported as data
+    /// quality errors so bad yearly inputs are not silently hidden.
+    pub fn load_files(paths: &[PathBuf]) -> Result<OhlcvLoadResult, NorthflowError> {
+        let source = paths
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        let mut quality = DataQualityReport::new(format!("multi-file:{source}"));
+        let mut candles: Vec<Candle> = Vec::new();
+
+        if paths.is_empty() {
+            quality.push_issue(
+                DataQualityIssueKind::EmptyFile,
+                None,
+                None,
+                "no historical files configured",
+            );
+            return Ok(OhlcvLoadResult { candles, quality });
+        }
+
+        for path in paths {
+            let previous_last = candles.last().copied();
+            let file_result = Self::load_file(path)?;
+            let current_first = file_result.candles.first().copied();
+
+            quality.total_rows += file_result.quality.total_rows;
+            quality.rejected_rows += file_result.quality.rejected_rows;
+            quality.issues.extend(file_result.quality.issues);
+            quality
+                .missing_gaps
+                .extend(file_result.quality.missing_gaps);
+
+            if let (Some(prev), Some(curr)) = (previous_last, current_first) {
+                let prev_ts = prev.timestamp;
+                let curr_ts = curr.timestamp;
+                let delta = curr_ts - prev_ts;
+
+                if curr_ts == prev_ts {
+                    quality.push_issue(
+                        DataQualityIssueKind::DuplicateTimestamp,
+                        None,
+                        Some(curr_ts),
+                        format!("duplicate timestamp {curr_ts} after merging historical files"),
+                    );
+                    quality.rejected_rows += 1;
+                } else if curr_ts < prev_ts {
+                    quality.push_issue(
+                        DataQualityIssueKind::NonMonotonicTimestamp,
+                        None,
+                        Some(curr_ts),
+                        format!("out-of-order timestamp after merging historical files: prev={prev_ts} current={curr_ts}"),
+                    );
+                } else {
+                    match classify_interval_delta(delta, SOURCE_TIMEFRAME_MS) {
+                        IntervalClassification::Exact => {}
+                        IntervalClassification::MissingGap { missing_count } => {
+                            let expected_next = prev_ts + SOURCE_TIMEFRAME_MS;
+                            quality.missing_gaps.push(MissingCandleGap {
+                                from_timestamp: prev_ts,
+                                to_timestamp: curr_ts,
+                                expected_next_timestamp: expected_next,
+                                missing_count,
+                            });
+                            quality.push_issue(
+                                DataQualityIssueKind::MissingCandleGap,
+                                None,
+                                Some(expected_next),
+                                format!("missing {missing_count} candle(s) between ts={prev_ts} and ts={curr_ts}"),
+                            );
+                        }
+                        IntervalClassification::Irregular => {
+                            quality.push_issue(
+                                DataQualityIssueKind::IrregularInterval,
+                                None,
+                                Some(curr_ts),
+                                format!("irregular 1m interval after merging historical files: prev={prev_ts} current={curr_ts} delta={delta} expected={SOURCE_TIMEFRAME_MS}"),
+                            );
+                        }
+                    }
+                }
+            }
+
+            candles.extend(file_result.candles);
+        }
+
+        quality.valid_candles = candles.len();
+        Ok(OhlcvLoadResult { candles, quality })
     }
 
     /// Parse raw CSV text into validated candles plus a data quality report.
@@ -886,5 +981,87 @@ mod tests {
             .issues
             .iter()
             .any(|i| i.kind == DataQualityIssueKind::IrregularInterval));
+    }
+
+    fn write_temp_csv(name: &str, body: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "northflow-{name}-{}-{}.csv",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&path, body).unwrap();
+        path
+    }
+
+    #[test]
+    fn load_files_merges_declared_order() {
+        let base = 1_700_000_000_000_i64;
+        let f1 = write_temp_csv(
+            "merge-a",
+            &format!(
+                "{HDR}\n{}\n{}\n",
+                row_ms(base),
+                row_ms(base + SOURCE_TIMEFRAME_MS)
+            ),
+        );
+        let f2 = write_temp_csv(
+            "merge-b",
+            &format!(
+                "{HDR}\n{}\n{}\n",
+                row_ms(base + 2 * SOURCE_TIMEFRAME_MS),
+                row_ms(base + 3 * SOURCE_TIMEFRAME_MS)
+            ),
+        );
+
+        let r = OhlcvLoader::load_files(&[f1.clone(), f2.clone()]).unwrap();
+        let _ = std::fs::remove_file(f1);
+        let _ = std::fs::remove_file(f2);
+
+        assert_eq!(r.candles.len(), 4);
+        assert_eq!(r.candles[0].timestamp, base);
+        assert_eq!(r.candles[3].timestamp, base + 3 * SOURCE_TIMEFRAME_MS);
+        assert!(!r.quality.has_errors());
+    }
+
+    #[test]
+    fn load_files_rejects_duplicate_timestamp_across_files() {
+        let base = 1_700_000_000_000_i64;
+        let f1 = write_temp_csv("dup-a", &format!("{HDR}\n{}\n", row_ms(base)));
+        let f2 = write_temp_csv("dup-b", &format!("{HDR}\n{}\n", row_ms(base)));
+
+        let r = OhlcvLoader::load_files(&[f1.clone(), f2.clone()]).unwrap();
+        let _ = std::fs::remove_file(f1);
+        let _ = std::fs::remove_file(f2);
+
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::DuplicateTimestamp));
+        assert!(r.quality.has_errors());
+    }
+
+    #[test]
+    fn load_files_rejects_out_of_order_file_sequence() {
+        let base = 1_700_000_000_000_i64;
+        let f1 = write_temp_csv(
+            "order-a",
+            &format!("{HDR}\n{}\n", row_ms(base + SOURCE_TIMEFRAME_MS)),
+        );
+        let f2 = write_temp_csv("order-b", &format!("{HDR}\n{}\n", row_ms(base)));
+
+        let r = OhlcvLoader::load_files(&[f1.clone(), f2.clone()]).unwrap();
+        let _ = std::fs::remove_file(f1);
+        let _ = std::fs::remove_file(f2);
+
+        assert!(r
+            .quality
+            .issues
+            .iter()
+            .any(|i| i.kind == DataQualityIssueKind::NonMonotonicTimestamp));
+        assert!(r.quality.has_errors());
     }
 }
