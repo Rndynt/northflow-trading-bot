@@ -38,7 +38,7 @@ use crate::market::{CandleStore, OhlcvLoader};
 use crate::risk::{CostModelConfig, RiskContext, RiskEngine};
 use crate::strategy::{
     EmaTrendPullbackV1, MultiTimeframeInput, ScreenedVwapScalp, ScreenedVwapScalpV2, Strategy,
-    StrategyContext,
+    StrategyContext, VwapReclaimShortV1,
 };
 
 // ── ActiveStrategy ────────────────────────────────────────────────────────────
@@ -47,6 +47,7 @@ enum ActiveStrategy {
     V1(ScreenedVwapScalp),
     V2(ScreenedVwapScalpV2),
     Etp(EmaTrendPullbackV1),
+    Vrs(VwapReclaimShortV1),
 }
 
 impl ActiveStrategy {
@@ -59,6 +60,7 @@ impl ActiveStrategy {
             Self::V1(s) => s.evaluate(ctx, input),
             Self::V2(s) => s.evaluate(ctx, input),
             Self::Etp(s) => s.evaluate(ctx, input),
+            Self::Vrs(s) => s.evaluate(ctx, input),
         }
     }
 }
@@ -211,6 +213,9 @@ impl BacktestEngine {
             }
             "ema_trend_pullback_v1" => {
                 ActiveStrategy::Etp(EmaTrendPullbackV1::new(cfg.etp_config()))
+            }
+            "vwap_reclaim_short_v1" => {
+                ActiveStrategy::Vrs(VwapReclaimShortV1::new(cfg.vrs_config()))
             }
             other => {
                 return Err(NorthflowError::ConfigError(format!(
@@ -883,6 +888,27 @@ mod tests {
         assert!(
             result.is_ok(),
             "v2 strategy must not return Err: {result:?}"
+        );
+        assert!(result.unwrap().is_some(), "expected Some for valid CSV");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn backtest_selects_vwap_reclaim_short_from_config() {
+        let dir = "/tmp";
+        let sym = format!("nf_vrssel_{}", std::process::id());
+        let path = format!("{dir}/{sym}.csv");
+        write_test_csv(&path, 250, 1_700_000_000_000);
+
+        let mut cfg = default_cfg();
+        cfg.data_dir = dir.to_string();
+        cfg.strategy_id = "vwap_reclaim_short_v1".to_string();
+        cfg.entry_lookback_bars = 80;
+
+        let result = BacktestEngine::run(&cfg, &sym);
+        assert!(
+            result.is_ok(),
+            "vwap_reclaim_short_v1 strategy must not return Err: {result:?}"
         );
         assert!(result.unwrap().is_some(), "expected Some for valid CSV");
         std::fs::remove_file(&path).ok();
