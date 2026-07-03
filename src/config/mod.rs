@@ -848,7 +848,10 @@ impl ResearchConfig {
     /// Must be called before the backtest engine uses the strategy.
     pub fn validate_strategy_config(&self) -> Result<(), NorthflowError> {
         match self.strategy_id.as_str() {
-            "screened_vwap_scalp" | "screened_vwap_scalp_v2" | "mean_revert_v1" => {}
+            "screened_vwap_scalp"
+            | "screened_vwap_scalp_v2"
+            | "mean_revert_v1"
+            | "liquidity_sweep_reclaim_v1" => {}
             "ema_trend_pullback_v1" => {
                 return self.validate_etp_config();
             }
@@ -862,7 +865,8 @@ impl ResearchConfig {
                 return Err(NorthflowError::ConfigError(format!(
                     "unknown strategy_id: '{other}'. \
                      Valid values: 'screened_vwap_scalp', 'screened_vwap_scalp_v2', \
-                     'ema_trend_pullback_v1', 'vwap_reclaim_short_v1', 'vwap_reclaim_short_v2', 'mean_revert_v1', 'vwap_reclaim_short_v2', 'mean_revert_v1'"
+                     'ema_trend_pullback_v1', 'vwap_reclaim_short_v1', 'vwap_reclaim_short_v2', \
+                     'mean_revert_v1', 'liquidity_sweep_reclaim_v1'"
                 )));
             }
         }
