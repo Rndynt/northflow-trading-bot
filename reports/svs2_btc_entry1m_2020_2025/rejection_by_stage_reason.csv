@@ -1,0 +1,5 @@
+stage,entry_geometry_mode,reason,count,unique_signals,avg_equity,avg_drawdown_pct,avg_daily_realized_pnl,avg_expected_reward_bps,avg_expected_cost_bps,avg_expected_net_edge_bps,min_expected_net_edge_bps,max_expected_net_edge_bps
+actual_entry,reanchor_to_actual_entry,expected_net_edge_not_positive,1,1,61.384725,98.772306,0.000000,18.996645,19.000000,-0.003355,-0.003355,-0.003355
+initial_risk,reanchor_to_actual_entry,daily_loss_limit_reached,21341,21341,82.000217,98.359996,-4.374805,30.836106,19.000000,11.836106,-4.999305,168.510305
+initial_risk,reanchor_to_actual_entry,expected_net_edge_not_positive,29695,29695,111.380682,97.772386,-2.032580,16.282632,19.000000,-2.717368,-4.999889,-0.000508
+initial_risk,reanchor_to_actual_entry,max_drawdown_reached,24558,24558,0.000000,100.000000,-0.000000,22.747997,19.000000,3.747997,-4.999602,157.443877
