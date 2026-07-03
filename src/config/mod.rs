@@ -817,7 +817,6 @@ impl ResearchConfig {
             "vwap_reclaim_short_v1" => self.vrs_cooldown_bars,
             "vwap_reclaim_short_v2" => self.vrs2_cooldown_bars,
             "mean_revert_v1" => self.v2_cooldown_bars,
-            "mean_revert_v1" => self.v2_cooldown_bars,
             _ => 0,
         }
     }
