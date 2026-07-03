@@ -1,5 +1,3 @@
-//! NorthflowError — unified error type for the core trading domain.
-
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -12,6 +10,7 @@ pub enum NorthflowError {
     InvalidTrade(String),
     ConfigError(String),
     DataError(String),
+    StrategyError(String),
 }
 
 impl fmt::Display for NorthflowError {
@@ -25,6 +24,7 @@ impl fmt::Display for NorthflowError {
             NorthflowError::InvalidTrade(m) => write!(f, "invalid trade: {m}"),
             NorthflowError::ConfigError(m) => write!(f, "config error: {m}"),
             NorthflowError::DataError(m) => write!(f, "data error: {m}"),
+            NorthflowError::StrategyError(m) => write!(f, "strategy: {m}"),
         }
     }
 }
