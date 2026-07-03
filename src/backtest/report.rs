@@ -97,7 +97,7 @@ impl ReportWriter {
             "trade_id,signal_id,symbol,strategy_id,regime,side,\
              entry_time,exit_time,entry_price,exit_price,stop_loss,take_profit,qty,\
              position_size_usd,entry_notional_usd,exit_notional_usd,avg_notional_usd,\
-             round_trip_notional_usd,fee_bps_round_trip,equity_at_entry_usd,\
+             round_trip_notional_usd,fee_bps_on_combined_notional,fee_bps_on_entry_notional,equity_at_entry_usd,\
              risk_amount_usd,risk_per_unit_usd,stop_distance_bps,risk_pct_of_equity,leverage_used,\
              gross_pnl,fee,slippage,net_pnl,reward_risk,bars_held,exit_reason,\
              entry_reason,filters_passed,filters_failed,expected_edge_bps,actual_edge_bps"
@@ -111,7 +111,7 @@ impl ReportWriter {
             let filters_failed = t.filters_failed.join("|");
             let notional = trade_notional_audit(t, equity_at_entry);
             let row = format!(
-                "{},{},{},{},{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.8},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{},{},{},{:.6},{:.6}",
+                "{},{},{},{},{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.8},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{},{},{},{:.6},{:.6}",
                 csv_escape(t.trade_id.as_str()),
                 csv_escape(t.signal_id.as_str()),
                 csv_escape(t.symbol.as_str()),
@@ -130,7 +130,8 @@ impl ReportWriter {
                 notional.exit_notional_usd,
                 notional.avg_notional_usd,
                 notional.round_trip_notional_usd,
-                notional.fee_bps_round_trip,
+                notional.fee_bps_on_combined_notional,
+                notional.fee_bps_on_entry_notional,
                 notional.equity_at_entry_usd,
                 notional.risk_amount_usd,
                 notional.risk_per_unit_usd,
@@ -270,7 +271,8 @@ struct TradeNotionalAudit {
     exit_notional_usd: f64,
     avg_notional_usd: f64,
     round_trip_notional_usd: f64,
-    fee_bps_round_trip: f64,
+    fee_bps_on_combined_notional: f64,
+    fee_bps_on_entry_notional: f64,
     equity_at_entry_usd: f64,
     risk_amount_usd: f64,
     risk_per_unit_usd: f64,
@@ -286,8 +288,13 @@ fn trade_notional_audit(t: &Trade, equity_at_entry_usd: f64) -> TradeNotionalAud
     let exit_notional_usd = t.exit_price * t.quantity;
     let avg_notional_usd = (entry_notional_usd + exit_notional_usd) / 2.0;
     let round_trip_notional_usd = entry_notional_usd + exit_notional_usd;
-    let fee_bps_round_trip = if round_trip_notional_usd > 0.0 {
+    let fee_bps_on_combined_notional = if round_trip_notional_usd > 0.0 {
         t.fee / round_trip_notional_usd * 10_000.0
+    } else {
+        0.0
+    };
+    let fee_bps_on_entry_notional = if entry_notional_usd > 0.0 {
+        t.fee / entry_notional_usd * 10_000.0
     } else {
         0.0
     };
@@ -316,7 +323,8 @@ fn trade_notional_audit(t: &Trade, equity_at_entry_usd: f64) -> TradeNotionalAud
         exit_notional_usd,
         avg_notional_usd,
         round_trip_notional_usd,
-        fee_bps_round_trip,
+        fee_bps_on_combined_notional,
+        fee_bps_on_entry_notional,
         equity_at_entry_usd,
         risk_amount_usd,
         risk_per_unit_usd,
@@ -499,7 +507,8 @@ mod tests {
         assert!((audit.entry_notional_usd - 3000.0).abs() < 1e-9);
         assert!((audit.exit_notional_usd - 3060.0).abs() < 1e-9);
         assert!((audit.round_trip_notional_usd - 6060.0).abs() < 1e-9);
-        assert!((audit.fee_bps_round_trip - 5.0).abs() < 1e-9);
+        assert!((audit.fee_bps_on_combined_notional - 5.0).abs() < 1e-9);
+        assert!((audit.fee_bps_on_entry_notional - 10.1).abs() < 1e-9);
         assert!((audit.risk_per_unit_usd - 300.0).abs() < 1e-9);
         assert!((audit.risk_amount_usd - 30.0).abs() < 1e-9);
         assert!((audit.stop_distance_bps - 100.0).abs() < 1e-9);
@@ -561,7 +570,8 @@ mod tests {
             "exit_notional_usd",
             "avg_notional_usd",
             "round_trip_notional_usd",
-            "fee_bps_round_trip",
+            "fee_bps_on_combined_notional",
+            "fee_bps_on_entry_notional",
             "equity_at_entry_usd",
             "risk_amount_usd",
             "risk_per_unit_usd",
