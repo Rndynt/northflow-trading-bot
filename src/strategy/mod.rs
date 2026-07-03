@@ -18,22 +18,13 @@
 //!   Phase 6 — backtest engine
 //!   Phase 7 — report writers
 
-pub mod ema_trend_pullback;
 pub mod liquidity_sweep_reclaim;
-pub mod mean_revert;
 pub mod regime;
+pub mod registry;
 pub mod screened_vwap_scalp;
-pub mod screened_vwap_scalp_v2;
 pub mod traits;
-pub mod vwap_reclaim_short;
-pub mod vwap_reclaim_short_v2;
 
-pub use ema_trend_pullback::EmaTrendPullbackV1;
 pub use liquidity_sweep_reclaim::LiquiditySweepReclaimV1;
-pub use mean_revert::MeanRevertV1;
 pub use regime::{classify_screening_regime, MarketRegime};
 pub use screened_vwap_scalp::ScreenedVwapScalp;
-pub use screened_vwap_scalp_v2::ScreenedVwapScalpV2;
 pub use traits::{MultiTimeframeInput, Strategy, StrategyContext};
-pub use vwap_reclaim_short::VwapReclaimShortV1;
-pub use vwap_reclaim_short_v2::VwapReclaimShortV2;
