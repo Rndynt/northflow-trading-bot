@@ -19,3 +19,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Generated backtest/research reports
+reports/
