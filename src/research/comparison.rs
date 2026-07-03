@@ -424,14 +424,14 @@ mod tests {
     fn comparison_summary_csv_writes_ok_row() {
         let dir = temp_dir("csv_ok");
         let summary = ComparisonSummary {
-            runs: vec![ok_result("screened_vwap_scalp")],
+            runs: vec![ok_result("basic_sample_strategy")],
         };
         ComparisonWriter::write_all(&dir, &summary).unwrap();
 
         let content = std::fs::read_to_string(format!("{dir}/comparison_summary.csv")).unwrap();
         assert!(content.contains("BTCUSDT"), "must contain symbol");
         assert!(
-            content.contains("screened_vwap_scalp"),
+            content.contains("basic_sample_strategy"),
             "must contain strategy"
         );
         assert!(content.contains(",ok,"), "must contain status=ok");
@@ -445,8 +445,8 @@ mod tests {
         let summary = ComparisonSummary {
             runs: vec![ComparisonRunResult::error(
                 "ETHUSDT",
-                "screened_vwap_scalp_v2",
-                "reports/comparison/screened_vwap_scalp_v2",
+                "basic_sample_strategy",
+                "reports/comparison/basic_sample_strategy",
                 "data quality errors",
             )],
         };
@@ -468,8 +468,8 @@ mod tests {
         let summary = ComparisonSummary {
             runs: vec![ComparisonRunResult::error(
                 "BTCUSDT",
-                "screened_vwap_scalp",
-                "reports/comparison/screened_vwap_scalp",
+                "basic_sample_strategy",
+                "reports/comparison/basic_sample_strategy",
                 "error with, comma",
             )],
         };
@@ -488,8 +488,8 @@ mod tests {
         let dir = temp_dir("json_runs");
         let summary = ComparisonSummary {
             runs: vec![
-                ok_result("screened_vwap_scalp"),
-                ok_result("screened_vwap_scalp_v2"),
+                ok_result("basic_sample_strategy"),
+                ok_result("basic_sample_strategy"),
             ],
         };
         ComparisonWriter::write_all(&dir, &summary).unwrap();
@@ -500,11 +500,11 @@ mod tests {
             "must have mode field"
         );
         assert!(
-            content.contains("screened_vwap_scalp"),
+            content.contains("basic_sample_strategy"),
             "must contain v1 strategy"
         );
         assert!(
-            content.contains("screened_vwap_scalp_v2"),
+            content.contains("basic_sample_strategy"),
             "must contain v2 strategy"
         );
         assert!(
@@ -533,7 +533,7 @@ mod tests {
     fn comparison_summary_paths_are_relative() {
         let dir = temp_dir("paths_rel");
         let summary = ComparisonSummary {
-            runs: vec![ok_result("screened_vwap_scalp")],
+            runs: vec![ok_result("basic_sample_strategy")],
         };
         ComparisonWriter::write_all(&dir, &summary).unwrap();
 

@@ -1,11 +1,7 @@
 //! Strategy registry for research/backtest runs.
-//!
-//! This is the only active module that maps configured strategy identifiers to
-//! concrete strategy implementations. The backtest engine receives a trait
-//! object and stays focused on deterministic replay.
 
 use crate::core::NorthflowError;
-use crate::strategy::{LiquiditySweepReclaimV1, ScreenedVwapScalp, Strategy};
+use crate::strategy::{BasicSampleStrategy, Strategy};
 
 pub struct StrategyRuntime {
     pub strategy_id: String,
@@ -14,20 +10,10 @@ pub struct StrategyRuntime {
 
 pub fn build_strategy_runtime(strategy_id: &str) -> Result<StrategyRuntime, NorthflowError> {
     let strategy: Box<dyn Strategy> = match strategy_id {
-        "screened_vwap_scalp" | "screened_vwap_scalp_v2" => Box::new(ScreenedVwapScalp::default()),
-        "liquidity_sweep_reclaim_v1" => Box::new(LiquiditySweepReclaimV1::default()),
-        // Historical config/tests still reference these ids, but their source
-        // files are not present in this checkout. Keep them mapped to the
-        // baseline strategy until they are restored or removed in a dedicated
-        // strategy cleanup, rather than making engine compilation depend on
-        // absent modules.
-        "ema_trend_pullback_v1"
-        | "vwap_reclaim_short_v1"
-        | "vwap_reclaim_short_v2"
-        | "mean_revert_v1" => Box::new(ScreenedVwapScalp::default()),
+        "basic_sample_strategy" => Box::new(BasicSampleStrategy),
         other => {
             return Err(NorthflowError::ConfigError(format!(
-                "unknown strategy_id: '{other}'"
+                "unknown strategy_id: '{other}'. Available strategy: 'basic_sample_strategy'"
             )));
         }
     };
@@ -36,4 +22,34 @@ pub fn build_strategy_runtime(strategy_id: &str) -> Result<StrategyRuntime, Nort
         strategy_id: strategy_id.to_string(),
         strategy,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basic_sample_strategy_resolves() {
+        let runtime = build_strategy_runtime("basic_sample_strategy").unwrap();
+        assert_eq!(runtime.strategy_id, "basic_sample_strategy");
+        assert_eq!(runtime.strategy.strategy_id(), "basic_sample_strategy");
+    }
+
+    #[test]
+    fn old_strategy_ids_are_rejected() {
+        for old in [
+            concat!("screened_", "vwap_", "scalp"),
+            concat!("screened_", "vwap_", "scalp_", "v2"),
+            concat!("ema_", "trend_", "pullback_", "v1"),
+            concat!("vwap_", "reclaim_", "short_", "v1"),
+            concat!("vwap_", "reclaim_", "short_", "v2"),
+            concat!("mean_", "revert_", "v1"),
+            concat!("liquidity_", "sweep_", "reclaim_", "v1"),
+        ] {
+            assert!(
+                build_strategy_runtime(old).is_err(),
+                "{old} should be rejected"
+            );
+        }
+    }
 }

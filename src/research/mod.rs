@@ -131,99 +131,11 @@ fn run_single_strategy(cfg: &ResearchConfig) -> Result<(), String> {
         .into_iter()
         .next()
         .unwrap_or_else(|| cfg.strategy_id.clone());
-    let run_cfg = cfg.with_strategy_for_run(&strategy_id, cfg.reports_dir.clone());
-
     println!("Backtest run mode: single");
     println!("Strategy:");
     println!("  strategy_id = {strategy_id}");
-    if strategy_id == "screened_vwap_scalp_v2" {
-        let v2 = run_cfg.v2_config();
-        println!(
-            "    v2_require_strict_confirmation  = {}",
-            v2.require_strict_confirmation
-        );
-        println!(
-            "    v2_require_ema_ribbon_alignment = {}",
-            v2.require_ema_ribbon_alignment
-        );
-        println!(
-            "    v2_allow_neutral_confirmation   = {}",
-            v2.allow_neutral_confirmation
-        );
-        println!(
-            "    v2_min_expected_reward_bps      = {:.1}",
-            v2.min_expected_reward_bps
-        );
-        println!(
-            "    v2_min_expected_net_edge_bps    = {:.1}",
-            v2.min_expected_net_edge_bps
-        );
-        println!(
-            "    v2_min_atr_bps                  = {:.1}",
-            v2.min_atr_bps
-        );
-        println!(
-            "    v2_max_atr_bps                  = {:.1}",
-            v2.max_atr_bps
-        );
-        println!(
-            "    v2_tp_atr_multiple              = {:.2}",
-            v2.tp_atr_multiple
-        );
-        println!(
-            "    v2_sl_atr_multiple              = {:.2}",
-            v2.sl_atr_multiple
-        );
-        println!(
-            "    v2_min_volume_ratio             = {:.2}",
-            v2.min_volume_ratio
-        );
-        println!(
-            "    v2_vwap_distance_atr_min        = {:.2}",
-            v2.vwap_distance_atr_min
-        );
-        println!(
-            "    v2_vwap_distance_atr_max        = {:.2}",
-            v2.vwap_distance_atr_max
-        );
-        println!("    v2_cooldown_bars                = {}", v2.cooldown_bars);
-        println!("    v2_enable_long                  = {}", v2.enable_long);
-        println!("    v2_enable_short                 = {}", v2.enable_short);
-    }
-    if strategy_id == "ema_trend_pullback_v1" {
-        let etp = run_cfg.etp_config();
-        println!();
-        println!("EMA Trend Pullback V1 filters:");
-        println!("  pullback_to:               {}", etp.pullback_to);
-        println!("  reclaim_mode:              {}", etp.reclaim_mode);
-        println!("  TP ATR multiple:           {:.2}", etp.tp_atr_multiple);
-        println!("  SL ATR multiple:           {:.2}", etp.sl_atr_multiple);
-        println!("  min reward/risk:           {:.2}", etp.min_reward_risk);
-        println!(
-            "  min expected reward bps:   {:.2}",
-            etp.min_expected_reward_bps
-        );
-        println!(
-            "  min expected net edge bps: {:.2}",
-            etp.min_expected_net_edge_bps
-        );
-        println!("  min ATR bps:               {:.2}", etp.min_atr_bps);
-        println!("  max ATR bps:               {:.2}", etp.max_atr_bps);
-        println!("  cooldown bars:             {}", etp.cooldown_bars);
-    }
-    println!("Reports dir: {}", run_cfg.reports_dir);
-    println!();
+    println!("  type = sample/reference implementation");
 
-    for symbol in &cfg.symbols {
-        run_symbol_verbose(&run_cfg, symbol);
-    }
-
-    println!("Indicators ready:");
-    println!("  EMA 8 / 21 / 50 / 200");
-    println!("  ATR 14 (Wilder smoothing)");
-    println!("  VWAP (session-cumulative)");
-    println!("  Volume SMA 20");
-    println!();
     println!("Strategy engine ready:");
     println!("  active: {strategy_id}");
     println!("  Output: Signal only");

@@ -168,7 +168,7 @@ mod tests {
         Signal {
             signal_id: SignalId::new("SIG-BT-00000001"),
             symbol: Symbol::new("BTCUSDT").unwrap(),
-            strategy_id: StrategyId::new("screened_vwap_scalp"),
+            strategy_id: StrategyId::new("basic_sample_strategy"),
             side: Side::Long,
             entry_timeframe: Timeframe::OneMinute,
             screening_timeframe: Timeframe::FifteenMinute,
@@ -192,7 +192,7 @@ mod tests {
         Signal {
             signal_id: SignalId::new("SIG-BT-00000002"),
             symbol: Symbol::new("BTCUSDT").unwrap(),
-            strategy_id: StrategyId::new("screened_vwap_scalp"),
+            strategy_id: StrategyId::new("basic_sample_strategy"),
             side: Side::Short,
             entry_timeframe: Timeframe::OneMinute,
             screening_timeframe: Timeframe::FifteenMinute,

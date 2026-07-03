@@ -69,7 +69,7 @@ pub struct MultiTimeframeInput {
 ///   - Never place orders.
 ///   - Emit only `Option<Signal>`, never an order or fill.
 pub trait Strategy {
-    /// Stable, unique identifier for this strategy (e.g. `"screened_vwap_scalp"`).
+    /// Stable, unique identifier for this strategy (e.g. `"basic_sample_strategy"`).
     fn strategy_id(&self) -> &'static str;
 
     /// Evaluate one multi-timeframe input and optionally emit a signal.

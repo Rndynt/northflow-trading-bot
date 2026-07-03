@@ -1,30 +1,15 @@
-//! Strategy engine — Phase 4.
+//! Strategy layer.
 //!
-//! Active strategies:
-//!   screened_vwap_scalp    — original deterministic strategy
-//!   screened_vwap_scalp_v2 — stricter, cost-aware research variant
-//!   ema_trend_pullback_v1  — multi-timeframe EMA trend pullback candidate
-//!   liquidity_sweep_reclaim_v1 — event-based liquidity sweep failure candidate
+//! Production strategy set is intentionally minimal. The only active production
+//! strategy is `basic_sample_strategy`, used as a reference implementation for
+//! future strategy development.
 //!
-//! Emits Signal only. No orders, no risk sizing, no backtest execution.
-//!
-//! Timeframe roles (explicit — never inferred from array order):
-//!   entry_timeframe        = "1m"   (entry and execution)
-//!   confirmation_timeframe = "5m"   (intermediate confirmation)
-//!   screening_timeframe    = "15m"  (market regime / bias)
-//!
-//! Downstream phases:
-//!   Phase 5 — risk and cost model
-//!   Phase 6 — backtest engine
-//!   Phase 7 — report writers
+//! Strategies emit `Signal` only. They must not place orders, size positions,
+//! call exchanges, mutate account state, or write reports.
 
-pub mod liquidity_sweep_reclaim;
-pub mod regime;
+pub mod basic_sample;
 pub mod registry;
-pub mod screened_vwap_scalp;
 pub mod traits;
 
-pub use liquidity_sweep_reclaim::LiquiditySweepReclaimV1;
-pub use regime::{classify_screening_regime, MarketRegime};
-pub use screened_vwap_scalp::ScreenedVwapScalp;
+pub use basic_sample::BasicSampleStrategy;
 pub use traits::{MultiTimeframeInput, Strategy, StrategyContext};
