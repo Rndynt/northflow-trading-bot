@@ -4,7 +4,11 @@
 //! paper     — DISABLED until research engine validated for paper.
 //! live      — DISABLED until paper/live parity proven.
 
-use northflow_trading_bot::{config::ResearchConfig, research::run_research};
+use northflow_trading_bot::{
+    config::ResearchConfig,
+    forecast::{run_forecast, ForecastConfig},
+    research::run_research,
+};
 use std::{env, process};
 
 fn main() {
@@ -23,6 +27,12 @@ fn real_main() -> Result<(), String> {
                 read_config_arg(&args).unwrap_or_else(|| "config/research.toml".to_string());
             let cfg = ResearchConfig::load(&config_path)?;
             run_research(&cfg)
+        }
+        "forecast" => {
+            let config_path =
+                read_config_arg(&args).unwrap_or_else(|| "config/forecast.toml".to_string());
+            let cfg = ForecastConfig::load(&config_path)?;
+            run_forecast(&cfg)
         }
         "paper" => {
             Err("paper mode is disabled — research engine not yet validated for paper".to_string())
@@ -45,7 +55,10 @@ fn print_help() {
     println!("Northflow Crypto Trading Bot");
     println!();
     println!("Usage:");
-    println!("  northflow research [--config config/research.toml]");
+    println!(
+        "  northflow research [--config config/research.toml]
+  northflow forecast [--config config/forecast.toml]"
+    );
     println!("  northflow paper   # disabled — research engine not yet validated for paper");
     println!("  northflow live    # disabled — paper/live parity not yet proven");
     println!();

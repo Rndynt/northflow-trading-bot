@@ -13,6 +13,7 @@ pub mod backtest;
 pub mod config;
 pub mod core;
 pub mod execution;
+pub mod forecast;
 pub mod indicators;
 pub mod journal;
 pub mod market;
