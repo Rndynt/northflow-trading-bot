@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "total_trades": 49,
+  "total_trades": 50,
   "error_count": 0,
   "warning_count": 0,
   "issues":   [
@@ -52,6 +52,7 @@
     {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000046","signal_id":"SIG-BT-00000046"},
     {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000047","signal_id":"SIG-BT-00000047"},
     {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000048","signal_id":"SIG-BT-00000048"},
-    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000049","signal_id":"SIG-BT-00000049"}
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000049","signal_id":"SIG-BT-00000049"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000050","signal_id":"SIG-BT-00000050"}
   ]
 }
