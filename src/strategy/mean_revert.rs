@@ -6,6 +6,7 @@ use crate::strategy::traits::{MultiTimeframeInput, Strategy, StrategyContext};
 const MIN_WICK: f64 = 0.35;
 const MIN_LOCATION: f64 = 0.55;
 const MAX_BODY: f64 = 0.70;
+const MIN_REVERSAL_PROGRESS_ATR: f64 = 0.20;
 
 #[derive(Debug, Clone)]
 pub struct MeanRevertV1 {
@@ -50,6 +51,10 @@ impl Strategy for MeanRevertV1 {
             return Ok(None);
         }
 
+        let Some(prev) = input.entry_lookback.last().copied() else {
+            return Ok(None);
+        };
+
         let atr_bps = atr / c.close * 10_000.0;
         if atr_bps < self.cfg.min_atr_bps || atr_bps > self.cfg.max_atr_bps {
             return Ok(None);
@@ -86,6 +91,11 @@ impl Strategy for MeanRevertV1 {
             classify_screening_regime(input.confirmation_candle, &input.confirmation_indicators);
 
         if blocked_by_trend(side, screen, confirm) {
+            return Ok(None);
+        }
+
+        let reversal = reversal_confirmation(side, prev, c, mean, atr);
+        if !reversal.ok {
             return Ok(None);
         }
 
@@ -136,11 +146,12 @@ impl Strategy for MeanRevertV1 {
             confidence,
             regime: screen.as_str().to_string(),
             entry_reason: format!(
-                "mean_revert_v1 ext_atr={:.2}, wick={:.2}, close_location={:.2}, vol={:.2}, atr_bps={:.1}",
-                ext_atr, r.wick, r.location, vol_ratio, atr_bps
+                "mean_revert_v1_confirmed ext_atr={:.2}, wick={:.2}, close_location={:.2}, reversal_progress_atr={:.2}, vol={:.2}, atr_bps={:.1}",
+                ext_atr, r.wick, r.location, reversal.progress_atr, vol_ratio, atr_bps
             ),
             filters_passed: vec![
                 "extension_ok".to_string(),
+                "reversal_confirmation_ok".to_string(),
                 "rejection_ok".to_string(),
                 "trend_block_ok".to_string(),
                 "expected_edge_ok".to_string(),
@@ -171,6 +182,60 @@ fn blocked_by_trend(side: Side, screen: MarketRegime, confirm: MarketRegime) -> 
     match side {
         Side::Long => screen == MarketRegime::Bearish && confirm == MarketRegime::Bearish,
         Side::Short => screen == MarketRegime::Bullish && confirm == MarketRegime::Bullish,
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Reversal {
+    ok: bool,
+    progress_atr: f64,
+}
+
+fn reversal_confirmation(
+    side: Side,
+    prev: crate::core::Candle,
+    c: crate::core::Candle,
+    mean: f64,
+    atr: f64,
+) -> Reversal {
+    if atr <= 0.0 {
+        return Reversal {
+            ok: false,
+            progress_atr: 0.0,
+        };
+    }
+
+    match side {
+        Side::Long => {
+            let progress_atr = (c.close - prev.close) / atr;
+            let prev_farther_from_mean =
+                prev.close < mean && (prev.close - mean).abs() >= (c.close - mean).abs();
+            let higher_low = c.low >= prev.low;
+            let bullish_close = c.close > c.open && c.close > prev.close;
+
+            Reversal {
+                ok: prev_farther_from_mean
+                    && higher_low
+                    && bullish_close
+                    && progress_atr >= MIN_REVERSAL_PROGRESS_ATR,
+                progress_atr,
+            }
+        }
+        Side::Short => {
+            let progress_atr = (prev.close - c.close) / atr;
+            let prev_farther_from_mean =
+                prev.close > mean && (prev.close - mean).abs() >= (c.close - mean).abs();
+            let lower_high = c.high <= prev.high;
+            let bearish_close = c.close < c.open && c.close < prev.close;
+
+            Reversal {
+                ok: prev_farther_from_mean
+                    && lower_high
+                    && bearish_close
+                    && progress_atr >= MIN_REVERSAL_PROGRESS_ATR,
+                progress_atr,
+            }
+        }
     }
 }
 
