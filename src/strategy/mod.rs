@@ -8,6 +8,7 @@
 //! call exchanges, mutate account state, or write reports.
 
 pub mod basic_sample;
+pub mod ids;
 pub mod registry;
 pub mod traits;
 

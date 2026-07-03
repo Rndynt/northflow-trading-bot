@@ -11,13 +11,17 @@
 
 pub mod comparison;
 
-use crate::backtest::{BacktestEngine, ReportWriter};
+use crate::backtest::{
+    BacktestConfig, BacktestEngine, BacktestRunInput, ReportWriter, TimeframeRoles,
+};
 use crate::config::ResearchConfig;
-use crate::market::{DataQualityIssueKind, OhlcvLoader};
+use crate::core::{Symbol, Timeframe};
+use crate::market::{CandleStore, DataQualityIssueKind, OhlcvLoader};
 use crate::report::{
     AttributionEngine, AttributionSummary, AttributionWriter, AuditSeverity, DiagnosticEngine,
     DiagnosticWriter, ManifestWriter, ReportAuditor, TradeDistributionSummary,
 };
+use crate::strategy::registry::build_strategy_runtime;
 
 use comparison::{ComparisonRunResult, ComparisonSummary, ComparisonWriter};
 
@@ -85,16 +89,20 @@ pub fn run_research(cfg: &ResearchConfig) -> Result<(), String> {
 
     println!("  Timeframe model:");
     println!(
-        "    entry_timeframe        = \"{}\"  (1m  → entry & execution)",
+        "    entry_timeframe        = \"{}\"  → entry & execution",
         cfg.entry_timeframe
     );
     println!(
-        "    screening_timeframe    = \"{}\" (15m → regime bias)",
+        "    confirmation_timeframe = \"{}\"  → intermediate confirmation",
+        cfg.confirmation_timeframe
+    );
+    println!(
+        "    screening_timeframe    = \"{}\"  → market regime / bias",
         cfg.screening_timeframe
     );
     println!(
-        "    confirmation_timeframe = \"{}\"  (5m  → confirmation)",
-        cfg.confirmation_timeframe
+        "    source_timeframe       = \"{}\"  → raw OHLCV source",
+        cfg.source_timeframe
     );
     println!();
     println!("  Entry geometry mode:");
@@ -148,9 +156,14 @@ fn run_single_strategy(cfg: &ResearchConfig) -> Result<(), String> {
     println!();
     println!("Backtest engine ready:");
     println!("  conservative intrabar fill model");
-    println!("  no lookahead across 5m / 15m candles");
+    println!("  no lookahead across configured confirmation/screening timeframes");
     println!("  deterministic signal IDs (SIG-BT-XXXXXXXX)");
     println!();
+
+    let run_cfg = cfg.with_strategy_for_run(&strategy_id, cfg.reports_dir.clone());
+    for symbol in &run_cfg.symbols {
+        run_symbol_verbose(&run_cfg, symbol);
+    }
 
     Ok(())
 }
@@ -285,12 +298,68 @@ fn run_symbol_strategy(
         return Ok(None);
     }
 
-    let result = BacktestEngine::run(cfg, symbol).map_err(|e| format!("{e}"))?;
+    let load_result = if data_paths.len() > 1 {
+        OhlcvLoader::load_files(&data_paths)
+    } else {
+        OhlcvLoader::load_file(&data_paths[0])
+    }
+    .map_err(|e| format!("{e}"))?;
 
-    let result = match result {
-        None => return Ok(None),
-        Some(r) => r,
-    };
+    if load_result.quality.error_count() > 0 {
+        return Err(format!(
+            "data quality errors in {}: {} error(s) must be fixed before backtest",
+            data_paths
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            load_result.quality.error_count()
+        ));
+    }
+    if load_result.candles.is_empty() {
+        return Ok(None);
+    }
+
+    let entry_tf =
+        Timeframe::from_str(&cfg.entry_timeframe).map_err(|e| format!("entry_timeframe: {e}"))?;
+    let confirmation_tf = Timeframe::from_str(&cfg.confirmation_timeframe)
+        .map_err(|e| format!("confirmation_timeframe: {e}"))?;
+    let screening_tf = Timeframe::from_str(&cfg.screening_timeframe)
+        .map_err(|e| format!("screening_timeframe: {e}"))?;
+    let store = CandleStore::build(load_result.candles, entry_tf, confirmation_tf, screening_tf)
+        .map_err(|e| format!("{e}"))?;
+    if store.entry_candles.is_empty() {
+        return Ok(None);
+    }
+
+    let strategy_runtime = build_strategy_runtime(&cfg.strategy_id).map_err(|e| format!("{e}"))?;
+    let symbol_obj = Symbol::new(symbol).map_err(|e| format!("invalid symbol '{symbol}': {e}"))?;
+    let result = BacktestEngine::run(BacktestRunInput {
+        symbol: symbol_obj,
+        store,
+        timeframes: TimeframeRoles {
+            entry: entry_tf,
+            confirmation: confirmation_tf,
+            screening: screening_tf,
+        },
+        backtest: BacktestConfig {
+            initial_equity: cfg.initial_equity,
+            reports_dir: cfg.reports_dir.clone(),
+            conservative_intrabar: cfg.conservative_intrabar,
+            max_bars_held: cfg.max_bars_held,
+            entry_geometry_mode: crate::backtest::EntryGeometryMode::parse(
+                &cfg.entry_geometry_mode,
+            )
+            .map_err(|e| format!("{e}"))?,
+        },
+        risk: cfg.risk_config(),
+        cost: cfg.cost_model_config(),
+        strategy: strategy_runtime.strategy.as_ref(),
+        min_confidence: cfg.min_confidence,
+        entry_lookback_bars: cfg.entry_lookback_bars,
+        cooldown_bars: cfg.cooldown_bars_for_strategy(&cfg.strategy_id) as usize,
+    })
+    .map_err(|e| format!("{e}"))?;
 
     // Build Phase 7 report data.
     let diagnostics =
@@ -386,7 +455,11 @@ fn run_symbol_verbose(cfg: &ResearchConfig, symbol: &str) {
         for path in &data_paths {
             println!("    {}", path.display());
         }
-        println!("  Place 1m OHLCV CSV file(s) with columns:");
+        println!("  Configure [historical_files], or place fallback CSV at data_dir/<SYMBOL>.csv.");
+        println!(
+            "  Source data currently must be {} OHLCV with columns:",
+            cfg.source_timeframe
+        );
         println!("    timestamp,open,high,low,close,volume");
         println!();
         return;
@@ -613,7 +686,11 @@ fn print_data_quality(
             .collect::<Vec<_>>()
             .join(", ")
     );
-    println!("Raw 1m candles:        {}", store.raw_1m.len());
+    println!(
+        "Raw {} candles:        {}",
+        cfg.source_timeframe,
+        store.raw_1m.len()
+    );
     println!(
         "Entry ({}) candles:   {}",
         store.entry_tf,
@@ -647,7 +724,7 @@ fn print_data_quality(
 
     if !quality.missing_gaps.is_empty() {
         println!();
-        println!("  Missing 1m gaps (warnings):");
+        println!("  Missing configured source-timeframe gaps (warnings):");
         for gap in &quality.missing_gaps {
             println!(
                 "    {} missing candle(s) after ts={}  (expected ts={})",

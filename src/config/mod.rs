@@ -12,8 +12,7 @@ use std::{
 };
 
 use crate::core::{NorthflowError, Timeframe};
-
-pub const BASIC_SAMPLE_STRATEGY_ID: &str = "basic_sample_strategy";
+use crate::strategy::ids::BASIC_SAMPLE_STRATEGY_ID;
 
 #[derive(Debug, Clone)]
 pub struct ResearchConfig {
@@ -22,6 +21,7 @@ pub struct ResearchConfig {
     pub screening_timeframe: String,
     pub confirmation_timeframe: String,
     pub data_dir: String,
+    pub source_timeframe: String,
     pub historical_files: HashMap<String, Vec<PathBuf>>,
     pub reports_dir: String,
     pub strategy_id: String,
@@ -54,6 +54,7 @@ impl Default for ResearchConfig {
             screening_timeframe: "15m".to_string(),
             confirmation_timeframe: "5m".to_string(),
             data_dir: "data/historical".to_string(),
+            source_timeframe: "1m".to_string(),
             historical_files: HashMap::new(),
             reports_dir: "reports".to_string(),
             strategy_id: BASIC_SAMPLE_STRATEGY_ID.to_string(),
@@ -225,6 +226,27 @@ impl ResearchConfig {
                 )));
             }
         }
+        if self.symbols.is_empty() || self.symbols.iter().any(|s| s.trim().is_empty()) {
+            return Err(NorthflowError::ConfigError(
+                "symbols must contain at least one non-empty symbol".to_string(),
+            ));
+        }
+        if self.source_timeframe != "1m" {
+            return Err(NorthflowError::ConfigError(
+                "source_timeframe currently supports only '1m' because higher timeframes are built from 1m candles".to_string(),
+            ));
+        }
+        if self.min_confidence > 100 {
+            return Err(NorthflowError::ConfigError(
+                "min_confidence must be in 0..=100".to_string(),
+            ));
+        }
+        if self.max_bars_held == 0 {
+            return Err(NorthflowError::ConfigError(
+                "max_bars_held must be > 0".to_string(),
+            ));
+        }
+        crate::backtest::EntryGeometryMode::parse(&self.entry_geometry_mode)?;
         if self.reports_dir.trim().is_empty() {
             return Err(NorthflowError::ConfigError(
                 "reports_dir must not be empty".to_string(),
@@ -257,41 +279,49 @@ impl ResearchConfig {
 
 fn apply_toml_value(cfg: &mut ResearchConfig, value: &toml::Value) {
     let get = |section: &str, key: &str| value.get(section).and_then(|s| s.get(key));
-    if let Some(v) = value.get("symbols").and_then(|v| v.as_array()) {
+    if let Some(v) = get("pairs", "symbols").and_then(|v| v.as_array()) {
         cfg.symbols = v
             .iter()
             .filter_map(|x| x.as_str().map(str::to_string))
             .collect();
     }
     if let Some(v) = get("data", "data_dir")
+        .or_else(|| get("backtest", "data_dir"))
         .or_else(|| value.get("data_dir"))
         .and_then(|v| v.as_str())
     {
         cfg.data_dir = v.to_string();
     }
-    if let Some(v) = get("reports", "reports_dir")
+    if let Some(v) = get("backtest", "reports_dir")
+        .or_else(|| get("reports", "reports_dir"))
         .or_else(|| value.get("reports_dir"))
         .and_then(|v| v.as_str())
     {
         cfg.reports_dir = v.to_string();
     }
-    if let Some(v) = get("timeframes", "entry_timeframe")
+    if let Some(v) = get("pairs", "entry_timeframe")
+        .or_else(|| get("timeframes", "entry_timeframe"))
         .or_else(|| value.get("entry_timeframe"))
         .and_then(|v| v.as_str())
     {
         cfg.entry_timeframe = v.to_string();
     }
-    if let Some(v) = get("timeframes", "screening_timeframe")
+    if let Some(v) = get("pairs", "screening_timeframe")
+        .or_else(|| get("timeframes", "screening_timeframe"))
         .or_else(|| value.get("screening_timeframe"))
         .and_then(|v| v.as_str())
     {
         cfg.screening_timeframe = v.to_string();
     }
-    if let Some(v) = get("timeframes", "confirmation_timeframe")
+    if let Some(v) = get("pairs", "confirmation_timeframe")
+        .or_else(|| get("timeframes", "confirmation_timeframe"))
         .or_else(|| value.get("confirmation_timeframe"))
         .and_then(|v| v.as_str())
     {
         cfg.confirmation_timeframe = v.to_string();
+    }
+    if let Some(v) = get("data", "source_timeframe").and_then(|v| v.as_str()) {
+        cfg.source_timeframe = v.to_string();
     }
     if let Some(v) = get("strategy", "strategy_id")
         .or_else(|| get("strategy", "active"))
@@ -358,7 +388,10 @@ fn apply_toml_value(cfg: &mut ResearchConfig, value: &toml::Value) {
     if let Some(v) = get("backtest", "max_bars_held").and_then(|v| v.as_integer()) {
         cfg.max_bars_held = v as u32;
     }
-    if let Some(v) = get("backtest", "min_confidence").and_then(|v| v.as_integer()) {
+    if let Some(v) = get("strategy", "min_confidence")
+        .or_else(|| get("backtest", "min_confidence"))
+        .and_then(|v| v.as_integer())
+    {
         cfg.min_confidence = v as u8;
     }
     if let Some(v) = get("backtest", "entry_geometry_mode").and_then(|v| v.as_str()) {
@@ -447,5 +480,90 @@ mod tests {
         let mut cfg = ResearchConfig::default();
         cfg.strategies = vec![concat!("screened_", "vwap_", "scalp").to_string()];
         assert!(cfg.validate_strategy_runner_config().is_err());
+    }
+
+    #[test]
+    fn parses_current_preset_sections() {
+        let raw = r#"
+[pairs]
+symbols = ["ETHUSDT"]
+entry_timeframe = "5m"
+confirmation_timeframe = "15m"
+screening_timeframe = "1h"
+[data]
+source_timeframe = "1m"
+data_dir = "custom/data"
+[strategy]
+strategy_id = "basic_sample_strategy"
+min_confidence = 91
+[backtest]
+reports_dir = "custom/reports"
+strategy_run_mode = "single"
+strategies = ["basic_sample_strategy"]
+"#;
+        let cfg = ResearchConfig::try_parse(raw).unwrap();
+        cfg.validate_runtime_config().unwrap();
+        cfg.validate_strategy_config().unwrap();
+        cfg.validate_strategy_runner_config().unwrap();
+        assert_eq!(cfg.symbols, vec!["ETHUSDT"]);
+        assert_eq!(cfg.entry_timeframe, "5m");
+        assert_eq!(cfg.confirmation_timeframe, "15m");
+        assert_eq!(cfg.screening_timeframe, "1h");
+        assert_eq!(cfg.source_timeframe, "1m");
+        assert_eq!(cfg.data_dir, "custom/data");
+        assert_eq!(cfg.reports_dir, "custom/reports");
+        assert_eq!(cfg.min_confidence, 91);
+    }
+
+    #[test]
+    fn rejects_non_1m_source_timeframe() {
+        let mut cfg = ResearchConfig::default();
+        cfg.source_timeframe = "5m".to_string();
+        let err = cfg.validate_runtime_config().unwrap_err().to_string();
+        assert!(err.contains("source_timeframe currently supports only '1m'"));
+    }
+
+    #[test]
+    fn rejects_invalid_min_confidence_and_symbols() {
+        let mut cfg = ResearchConfig::default();
+        cfg.min_confidence = 101;
+        assert!(cfg.validate_runtime_config().is_err());
+        let mut cfg = ResearchConfig::default();
+        cfg.symbols.clear();
+        assert!(cfg.validate_runtime_config().is_err());
+    }
+
+    #[test]
+    fn rejects_duplicate_strategy_ids_and_multi_mode() {
+        let mut cfg = ResearchConfig::default();
+        cfg.strategies = vec![
+            BASIC_SAMPLE_STRATEGY_ID.to_string(),
+            BASIC_SAMPLE_STRATEGY_ID.to_string(),
+        ];
+        assert!(cfg.validate_strategy_runner_config().is_err());
+        let mut cfg = ResearchConfig::default();
+        cfg.strategy_run_mode = "multi".to_string();
+        assert!(cfg
+            .validate_strategy_runner_config()
+            .unwrap_err()
+            .to_string()
+            .contains("not implemented"));
+    }
+
+    #[test]
+    fn rejects_invalid_timeframe_roles() {
+        let mut cfg = ResearchConfig::default();
+        cfg.entry_timeframe = "5m".to_string();
+        cfg.confirmation_timeframe = "5m".to_string();
+        cfg.screening_timeframe = "1h".to_string();
+        assert!(cfg.validate_timeframes().is_err());
+        cfg.entry_timeframe = "15m".to_string();
+        cfg.confirmation_timeframe = "5m".to_string();
+        assert!(cfg.validate_timeframes().is_err());
+    }
+
+    #[test]
+    fn malformed_toml_returns_error() {
+        assert!(ResearchConfig::try_parse("[pairs\nsymbols = [").is_err());
     }
 }
