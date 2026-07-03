@@ -6,6 +6,7 @@
 //! account state.
 
 use crate::core::{NorthflowError, Side, Signal, SignalId, StrategyId};
+use crate::market::classify_basic_regime;
 use crate::strategy::traits::{MultiTimeframeInput, Strategy, StrategyContext};
 
 #[derive(Debug, Clone)]
@@ -72,11 +73,15 @@ impl Strategy for BasicSampleStrategy {
         };
 
         let entry = input.entry_candle.close;
-        let (stop_loss, take_profit, regime, entry_reason, filters_passed) = match side {
+        let regime = classify_basic_regime(
+            input.screening_candle.close,
+            input.screening_indicators.vwap,
+            input.screening_indicators.ema_50,
+        );
+        let (stop_loss, take_profit, entry_reason, filters_passed) = match side {
             Side::Long => (
                 entry - atr,
                 entry + atr * 1.5,
-                "sample_bullish",
                 "sample long: entry above VWAP with EMA and higher-timeframe alignment",
                 vec![
                     "entry_close_above_entry_vwap",
@@ -89,7 +94,6 @@ impl Strategy for BasicSampleStrategy {
             Side::Short => (
                 entry + atr,
                 entry - atr * 1.5,
-                "sample_bearish",
                 "sample short: entry below VWAP with EMA and higher-timeframe alignment",
                 vec![
                     "entry_close_below_entry_vwap",
@@ -118,7 +122,7 @@ impl Strategy for BasicSampleStrategy {
             stop_loss,
             take_profit,
             confidence,
-            regime: regime.to_string(),
+            regime: regime.as_str().to_string(),
             entry_reason: entry_reason.to_string(),
             filters_passed: filters_passed.into_iter().map(str::to_string).collect(),
             filters_failed: vec![],
@@ -203,6 +207,9 @@ mod tests {
         assert_eq!(sig.entry_timeframe, Timeframe::OneMinute);
         assert_eq!(sig.confirmation_timeframe, Timeframe::FiveMinute);
         assert_eq!(sig.screening_timeframe, Timeframe::FifteenMinute);
+        assert_eq!(sig.regime, "bullish");
+        assert_ne!(sig.regime, "sample_bullish");
+        assert!(["bullish", "bearish", "ranging", "unknown"].contains(&sig.regime.as_str()));
     }
 
     #[test]
@@ -216,6 +223,9 @@ mod tests {
         let sig = BasicSampleStrategy.evaluate(&ctx(), &i).unwrap().unwrap();
         assert_eq!(sig.side, Side::Short);
         assert!(sig.valid_geometry());
+        assert_eq!(sig.regime, "bearish");
+        assert_ne!(sig.regime, "sample_bearish");
+        assert!(["bullish", "bearish", "ranging", "unknown"].contains(&sig.regime.as_str()));
     }
 
     #[test]
