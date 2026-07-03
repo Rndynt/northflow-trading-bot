@@ -1,0 +1,19 @@
+# Global execution cost profile.
+# Binance USD-M Futures maker baseline.
+#
+# IMPORTANT:
+# - Current engine field is named `taker_fee_bps`, but it is effectively
+#   the per-leg execution fee used by the cost model.
+# - For maker-only simulation, set it to 2 bps.
+# - 0.02% maker = 2 bps per leg.
+# - Round-trip maker fee = 4 bps.
+#
+# Funding, dynamic spread, and dynamic slippage are not fixed here.
+# They must be modelled separately, not mixed into the base exchange fee.
+
+[cost]
+taker_fee_bps = 2.0
+slippage_bps = 0.0
+spread_bps = 0.0
+market_impact_bps = 0.0
+stop_slippage_bps = 0.0
