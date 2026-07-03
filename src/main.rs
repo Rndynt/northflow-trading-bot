@@ -1,6 +1,6 @@
 //! Northflow CLI entry point.
 //!
-//! research  — Phase 7: reports and attribution ready.
+//! research  — deterministic backtest and strategy research mode.
 //! paper     — DISABLED until research engine validated for paper.
 //! live      — DISABLED until paper/live parity proven.
 
@@ -49,13 +49,13 @@ fn print_help() {
     println!("  northflow paper   # disabled — research engine not yet validated for paper");
     println!("  northflow live    # disabled — paper/live parity not yet proven");
     println!();
-    println!("Phase 7: reports and attribution ready.");
-    println!("         Backtest output: simulated Trade records only.");
-    println!(
-        "         Reports include summary, trades, equity curve, attribution, audit, and manifest."
-    );
-    println!("         No live orders, no paper trading, no exchange calls.");
-    println!("         Place 1m CSV data in data/historical/<SYMBOL>.csv");
-    println!("         Columns: timestamp,open,high,low,close,volume");
-    println!("         Alternative timestamp column: open_time");
+    println!("Research mode:");
+    println!("  Runs deterministic historical backtests only.");
+    println!("  Outputs simulated Trade records, reports, diagnostics, and attribution files.");
+    println!("  No live orders, no paper trading, no exchange calls.");
+    println!();
+    println!("Historical data:");
+    println!("  Place 1m CSV data in data/historical/<SYMBOL>.csv");
+    println!("  Columns: timestamp,open,high,low,close,volume");
+    println!("  Alternative timestamp column: open_time");
 }
