@@ -1,6 +1,6 @@
 //! Report writer — writes backtest results to reports/ directory.
 //!
-//! No external dependencies.  Uses std::fs only.
+//! No external dependencies. Uses std::fs only.
 //! Creates the reports directory if missing.
 
 use std::fs;
@@ -92,6 +92,8 @@ impl ReportWriter {
         rows.push(
             "trade_id,signal_id,symbol,strategy_id,regime,side,\
              entry_time,exit_time,entry_price,exit_price,stop_loss,take_profit,qty,\
+             position_size_usd,entry_notional_usd,exit_notional_usd,avg_notional_usd,\
+             round_trip_notional_usd,fee_bps_round_trip,\
              gross_pnl,fee,slippage,net_pnl,reward_risk,bars_held,exit_reason,\
              entry_reason,filters_passed,filters_failed,expected_edge_bps,actual_edge_bps"
                 .to_string(),
@@ -100,8 +102,9 @@ impl ReportWriter {
         for t in trades {
             let filters_passed = t.filters_passed.join("|");
             let filters_failed = t.filters_failed.join("|");
+            let notional = trade_notional_audit(t);
             let row = format!(
-                "{},{},{},{},{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.8},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{},{},{},{:.6},{:.6}",
+                "{},{},{},{},{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.8},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{},{},{},{:.6},{:.6}",
                 csv_escape(t.trade_id.as_str()),
                 csv_escape(t.signal_id.as_str()),
                 csv_escape(t.symbol.as_str()),
@@ -115,6 +118,12 @@ impl ReportWriter {
                 t.stop_loss,
                 t.take_profit,
                 t.quantity,
+                notional.position_size_usd,
+                notional.entry_notional_usd,
+                notional.exit_notional_usd,
+                notional.avg_notional_usd,
+                notional.round_trip_notional_usd,
+                notional.fee_bps_round_trip,
                 t.gross_pnl,
                 t.fee,
                 t.slippage,
@@ -235,6 +244,41 @@ impl ReportWriter {
     }
 }
 
+// ── Trade notional audit ──────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy)]
+struct TradeNotionalAudit {
+    position_size_usd: f64,
+    entry_notional_usd: f64,
+    exit_notional_usd: f64,
+    avg_notional_usd: f64,
+    round_trip_notional_usd: f64,
+    fee_bps_round_trip: f64,
+}
+
+fn trade_notional_audit(t: &Trade) -> TradeNotionalAudit {
+    // `quantity` is base asset quantity, e.g. BTC quantity for BTCUSDT.
+    // Position size / notional must be shown in quote currency (USDT/USD).
+    let entry_notional_usd = t.entry_price * t.quantity;
+    let exit_notional_usd = t.exit_price * t.quantity;
+    let avg_notional_usd = (entry_notional_usd + exit_notional_usd) / 2.0;
+    let round_trip_notional_usd = entry_notional_usd + exit_notional_usd;
+    let fee_bps_round_trip = if round_trip_notional_usd > 0.0 {
+        t.fee / round_trip_notional_usd * 10_000.0
+    } else {
+        0.0
+    };
+
+    TradeNotionalAudit {
+        position_size_usd: entry_notional_usd,
+        entry_notional_usd,
+        exit_notional_usd,
+        avg_notional_usd,
+        round_trip_notional_usd,
+        fee_bps_round_trip,
+    }
+}
+
 // ── CSV helpers ───────────────────────────────────────────────────────────────
 
 /// RFC-4180 minimal CSV escaping.
@@ -294,9 +338,9 @@ mod tests {
             take_profit: 30_600.0,
             quantity: 0.1,
             gross_pnl: 60.0,
-            fee: 5.0,
+            fee: 3.03,
             slippage: 3.0,
-            net_pnl: 52.0,
+            net_pnl: 53.97,
             reward_risk: 2.0,
             bars_held: 10,
             exit_reason: TradeExitReason::TakeProfit,
@@ -361,10 +405,7 @@ mod tests {
         )
         .unwrap();
         let content = std::fs::read_to_string(format!("{dir}/backtest_summary.json")).unwrap();
-        assert!(
-            content.contains("\"total_trades\""),
-            "missing field: {content}"
-        );
+        assert!(content.contains("\"total_trades\""), "missing field: {content}");
         assert!(content.contains("\"win_rate\""));
         assert!(content.contains("\"net_pnl\""));
         std::fs::remove_dir_all(&dir).ok();
@@ -385,7 +426,20 @@ mod tests {
         let content = std::fs::read_to_string(format!("{dir}/trades.csv")).unwrap();
         assert!(content.contains("TRD-SIG-BT-00000001"), "trade_id missing");
         assert!(content.contains("BTCUSDT"), "symbol missing");
+        assert!(content.contains("position_size_usd"), "position size header missing");
+        assert!(content.contains("3000.000000"), "entry notional missing: {content}");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn trade_notional_audit_calculates_usd_size_and_fee_bps() {
+        let t = test_trade();
+        let audit = trade_notional_audit(&t);
+        assert!((audit.position_size_usd - 3000.0).abs() < 1e-9);
+        assert!((audit.entry_notional_usd - 3000.0).abs() < 1e-9);
+        assert!((audit.exit_notional_usd - 3060.0).abs() < 1e-9);
+        assert!((audit.round_trip_notional_usd - 6060.0).abs() < 1e-9);
+        assert!((audit.fee_bps_round_trip - 5.0).abs() < 1e-9);
     }
 
     #[test]
@@ -437,6 +491,12 @@ mod tests {
             "stop_loss",
             "take_profit",
             "qty",
+            "position_size_usd",
+            "entry_notional_usd",
+            "exit_notional_usd",
+            "avg_notional_usd",
+            "round_trip_notional_usd",
+            "fee_bps_round_trip",
             "gross_pnl",
             "fee",
             "slippage",
@@ -498,7 +558,6 @@ mod tests {
             content.contains("signal_id,stage,entry_geometry_mode,timestamp,side,regime,reason"),
             "header missing for empty file: {content}"
         );
-        // Only header, no data rows
         let lines: Vec<&str> = content.lines().collect();
         assert_eq!(
             lines.len(),
@@ -556,7 +615,7 @@ mod tests {
             entry_geometry_mode: "preserve_signal_levels".to_string(),
             timestamp: 1_700_000_000_000,
             side: "long".to_string(),
-            regime: "bull,ish".to_string(), // contains comma — must be escaped
+            regime: "bull,ish".to_string(),
             reason: "max_drawdown_reached".to_string(),
             equity: 9_500.0,
             peak_equity: 10_000.0,
@@ -592,31 +651,6 @@ mod tests {
     }
 
     #[test]
-    fn writes_risk_rejections_csv_with_stage_header() {
-        let dir = temp_dir("stage_header");
-        ReportWriter::write_all(
-            &dir,
-            &test_summary(),
-            &[],
-            &[],
-            &[test_rejection()],
-            &SignalFlowSummary::default(),
-        )
-        .unwrap();
-        let content = std::fs::read_to_string(format!("{dir}/risk_rejections.csv")).unwrap();
-        let header = content.lines().next().unwrap_or("");
-        assert!(
-            header.starts_with("signal_id,stage,"),
-            "stage must be second column in header: {header}"
-        );
-        assert!(
-            header.contains("timestamp"),
-            "header must still have timestamp: {header}"
-        );
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
     fn writes_risk_rejections_csv_stage_value() {
         let dir = temp_dir("stage_value");
         let mut actual_entry_rej = test_rejection();
@@ -644,38 +678,11 @@ mod tests {
     }
 
     #[test]
-    fn writes_empty_risk_rejections_csv_with_stage_header() {
-        let dir = temp_dir("stage_header_empty");
-        ReportWriter::write_all(
-            &dir,
-            &test_summary(),
-            &[],
-            &[],
-            &[],
-            &SignalFlowSummary::default(),
-        )
-        .unwrap();
-        let content = std::fs::read_to_string(format!("{dir}/risk_rejections.csv")).unwrap();
-        let header = content.lines().next().unwrap_or("");
-        assert!(
-            header.contains("signal_id,stage,entry_geometry_mode,timestamp"),
-            "entry_geometry_mode must be in header even when no rejections: {header}"
-        );
-        let lines: Vec<&str> = content.lines().collect();
-        assert_eq!(
-            lines.len(),
-            1,
-            "empty rejections should produce only header"
-        );
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
     fn risk_rejections_csv_escapes_stage() {
         let dir = temp_dir("stage_escape");
         let r = RiskRejection {
             signal_id: "SIG-BT-00000001".to_string(),
-            stage: "initial,risk".to_string(), // comma must be escaped
+            stage: "initial,risk".to_string(),
             entry_geometry_mode: "preserve_signal_levels".to_string(),
             timestamp: 1_700_000_000_000,
             side: "long".to_string(),
