@@ -55,7 +55,8 @@ fn print_help() {
     println!("  No live orders, no paper trading, no exchange calls.");
     println!();
     println!("Historical data:");
-    println!("  Place 1m CSV data in data/historical/<SYMBOL>.csv");
+    println!("  Configure [historical_files] in the preset, or place fallback CSV at data_dir/<SYMBOL>.csv.");
+    println!("  Source data currently must be 1m OHLCV.");
     println!("  Columns: timestamp,open,high,low,close,volume");
     println!("  Alternative timestamp column: open_time");
 }

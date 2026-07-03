@@ -10,6 +10,7 @@
 //! Paper and live modes remain disabled.
 
 pub mod comparison;
+pub mod output;
 
 use crate::backtest::{
     BacktestConfig, BacktestEngine, BacktestRunInput, ReportWriter, TimeframeRoles,
@@ -24,6 +25,7 @@ use crate::report::{
 use crate::strategy::registry::build_strategy_runtime;
 
 use comparison::{ComparisonRunResult, ComparisonSummary, ComparisonWriter};
+use output as out;
 
 // ── CompletedResearchRun ──────────────────────────────────────────────────────
 
@@ -77,46 +79,40 @@ struct CompletedResearchRun {
 /// Validates config, dispatches by strategy_run_mode, and runs the appropriate
 /// single-strategy or comparison backtest.
 pub fn run_research(cfg: &ResearchConfig) -> Result<(), String> {
-    println!("=================================================================");
-    println!(" Northflow — Phase 7: Reports and Attribution");
-    println!("=================================================================");
-    println!();
-
     cfg.validate_timeframes().map_err(|e| format!("{e}"))?;
     cfg.validate_strategy_config().map_err(|e| format!("{e}"))?;
     cfg.validate_strategy_runner_config()
         .map_err(|e| format!("{e}"))?;
 
-    println!("  Timeframe model:");
-    println!(
-        "    entry_timeframe        = \"{}\"  → entry & execution",
-        cfg.entry_timeframe
-    );
-    println!(
-        "    confirmation_timeframe = \"{}\"  → intermediate confirmation",
-        cfg.confirmation_timeframe
-    );
-    println!(
-        "    screening_timeframe    = \"{}\"  → market regime / bias",
-        cfg.screening_timeframe
-    );
-    println!(
-        "    source_timeframe       = \"{}\"  → raw OHLCV source",
-        cfg.source_timeframe
-    );
-    println!();
-    println!("  Entry geometry mode:");
-    println!(
-        "    entry_geometry_mode    = \"{}\"",
-        cfg.entry_geometry_mode
-    );
-    println!();
-    println!("  paper mode  DISABLED — research engine not yet validated for paper");
-    println!("  live mode   DISABLED — paper/live parity not yet proven");
-    println!();
-    println!("  Note: backtest results are historical simulation only.");
-    println!("        Do not use as financial advice or profitability claims.");
-    println!();
+    let strategies = cfg.selected_strategies().map_err(|e| format!("{e}"))?;
+
+    out::section("Northflow Research");
+    out::subsection("Run Plan");
+    out::key_value("Mode", "research");
+    out::key_value("Run mode", &cfg.strategy_run_mode);
+    out::key_value("Strategy", strategies.join(", "));
+    out::key_value("Symbols", cfg.symbols.join(", "));
+    out::key_value("Source TF", &cfg.source_timeframe);
+    out::key_value("Entry TF", &cfg.entry_timeframe);
+    out::key_value("Confirm TF", &cfg.confirmation_timeframe);
+    out::key_value("Screen TF", &cfg.screening_timeframe);
+    out::key_value("Reports Dir", &cfg.reports_dir);
+    out::key_value("Entry geometry", &cfg.entry_geometry_mode);
+    out::blank();
+
+    out::subsection("Runtime Guardrails");
+    out::key_value("Paper trading", "disabled");
+    out::key_value("Live trading", "disabled");
+    out::key_value("Exchange calls", "disabled");
+    out::blank();
+
+    out::subsection("Engine");
+    out::key_value("Strategy output", "Signal only");
+    out::key_value("Risk output", "RiskAssessment only");
+    out::key_value("Backtest model", "conservative intrabar fill");
+    out::key_value("Lookahead", "disabled across configured higher timeframes");
+    out::key_value("Signal IDs", "deterministic SIG-BT-XXXXXXXX");
+    out::blank();
 
     match cfg.strategy_run_mode.as_str() {
         "single" => run_single_strategy(cfg),
@@ -139,26 +135,6 @@ fn run_single_strategy(cfg: &ResearchConfig) -> Result<(), String> {
         .into_iter()
         .next()
         .unwrap_or_else(|| cfg.strategy_id.clone());
-    println!("Backtest run mode: single");
-    println!("Strategy:");
-    println!("  strategy_id = {strategy_id}");
-    println!("  type = sample/reference implementation");
-
-    println!("Strategy engine ready:");
-    println!("  active: {strategy_id}");
-    println!("  Output: Signal only");
-    println!();
-    println!("Risk model ready:");
-    println!("  position sizing");
-    println!("  cost model");
-    println!("  risk guards");
-    println!("  Output: RiskAssessment only");
-    println!();
-    println!("Backtest engine ready:");
-    println!("  conservative intrabar fill model");
-    println!("  no lookahead across configured confirmation/screening timeframes");
-    println!("  deterministic signal IDs (SIG-BT-XXXXXXXX)");
-    println!();
 
     let run_cfg = cfg.with_strategy_for_run(&strategy_id, cfg.reports_dir.clone());
     for symbol in &run_cfg.symbols {
@@ -449,19 +425,20 @@ fn run_symbol_verbose(cfg: &ResearchConfig, symbol: &str) {
     let data_paths = cfg.historical_paths_for(symbol);
 
     if data_paths.iter().any(|path| !path.exists()) {
-        println!("Symbol: {symbol}");
-        println!("  No historical CSV found.");
-        println!("  Expected path(s):");
-        for path in &data_paths {
-            println!("    {}", path.display());
+        out::subsection(&format!("Symbol: {symbol}"));
+        println!("Missing historical data.");
+        println!("Expected files:");
+        for (idx, path) in data_paths.iter().enumerate() {
+            out::numbered(idx + 1, path.display());
         }
-        println!("  Configure [historical_files], or place fallback CSV at data_dir/<SYMBOL>.csv.");
+        println!("How to fix:");
+        out::bullet("configure [historical_files], or");
+        out::bullet("place fallback CSV at data_dir/<SYMBOL>.csv");
         println!(
-            "  Source data currently must be {} OHLCV with columns:",
+            "Source data currently must be {} OHLCV with columns timestamp,open,high,low,close,volume",
             cfg.source_timeframe
         );
-        println!("    timestamp,open,high,low,close,volume");
-        println!();
+        out::blank();
         return;
     }
 
@@ -472,7 +449,7 @@ fn run_symbol_verbose(cfg: &ResearchConfig, symbol: &str) {
         return;
     }
 
-    println!("Running backtest replay...");
+    out::subsection("Backtest Replay");
     match run_symbol_strategy(cfg, symbol) {
         Err(e) => {
             println!("  Backtest error: {e}");
@@ -488,134 +465,150 @@ fn run_symbol_verbose(cfg: &ResearchConfig, symbol: &str) {
             } else {
                 format!("{:.4}", run.profit_factor)
             };
-            println!("  Backtest complete:");
-            println!("    Total trades:           {}", run.total_trades);
-            println!("    Win rate:               {:.2}%", run.win_rate);
-            println!("    Net PnL:                {:.2}", run.net_pnl);
-            println!("    Gross PnL:              {:.2}", run.gross_pnl);
-            println!("    Total fees:             {:.2}", run.total_fee);
-            println!("    Total slippage:         {:.2}", run.total_slippage);
-            println!("    Profit factor:          {pf_str}");
-            println!("    Max drawdown:           {:.2}%", run.max_drawdown);
-            println!("    Max consecutive losses: {}", run.max_consecutive_losses);
-            println!();
 
-            println!("  Signal flow:");
-            println!("    signals generated:          {}", run.signals_generated);
-            println!(
-                "    signals preapproved:        {}",
-                run.signals_preapproved
+            out::subsection("Backtest Summary");
+            out::key_value("Total trades", out::format_int(run.total_trades));
+            out::key_value("Win rate", format!("{:.2}%", run.win_rate));
+            out::key_value("Net PnL", out::format_f64(run.net_pnl, 2));
+            out::key_value("Gross PnL", out::format_f64(run.gross_pnl, 2));
+            out::key_value("Total fees", out::format_f64(run.total_fee, 2));
+            out::key_value("Total slippage", out::format_f64(run.total_slippage, 2));
+            out::key_value("Profit factor", pf_str);
+            out::key_value("Max drawdown", format!("{:.2}%", run.max_drawdown));
+            out::key_value(
+                "Max consecutive losses",
+                out::format_int(run.max_consecutive_losses),
             );
-            println!(
-                "    rejected initial risk:      {}",
-                run.signals_rejected_initial_risk
-            );
-            println!(
-                "    rejected actual entry:      {}",
-                run.signals_rejected_actual_entry
-            );
-            println!("    trades opened:              {}", run.trades_opened);
-            println!("    trades closed:              {}", run.trades_closed);
-            println!("    risk rejection rows:        {}", run.risk_rejections);
-            if run.risk_rejections > 0 {
-                println!(
-                    "      max_drawdown:             {}",
-                    run.rejections_max_drawdown
-                );
-                println!(
-                    "      daily_loss:               {}",
-                    run.rejections_daily_loss
-                );
-                println!(
-                    "      reward_risk:              {}",
-                    run.rejections_reward_risk
-                );
-                println!(
-                    "      expected_net_edge:        {}",
-                    run.rejections_expected_net_edge
-                );
-                println!("      other:                    {}", run.rejections_other);
-            }
-            println!();
+            out::blank();
 
-            println!("  Base reports written:");
-            println!("    {}/backtest_summary.json", cfg.reports_dir);
-            println!("    {}/trades.csv", cfg.reports_dir);
-            println!("    {}/equity_curve.csv", cfg.reports_dir);
-            println!("    {}/risk_rejections.csv", cfg.reports_dir);
-            println!("    {}/signal_flow_summary.json", cfg.reports_dir);
-            println!("Base backtest reports written.");
-            println!();
-
-            println!("  Audit report:");
-            println!(
-                "    passed:   {}",
-                if run.audit_passed { "true" } else { "false" }
+            out::subsection("Signal Flow");
+            out::key_value("Signals generated", out::format_int(run.signals_generated));
+            out::key_value(
+                "Signals preapproved",
+                out::format_int(run.signals_preapproved),
             );
-            println!("    errors:   {}", run.audit_error_count);
-            println!("    warnings: {}", run.audit_warning_count);
+            out::key_value(
+                "Rejected initial risk",
+                out::format_int(run.signals_rejected_initial_risk),
+            );
+            out::key_value(
+                "Rejected actual entry",
+                out::format_int(run.signals_rejected_actual_entry),
+            );
+            out::key_value("Trades opened", out::format_int(run.trades_opened));
+            out::key_value("Trades closed", out::format_int(run.trades_closed));
+            out::key_value("Risk rejection rows", out::format_int(run.risk_rejections));
+            out::blank();
 
+            out::subsection("Rejection Breakdown");
+            out::key_value("Max drawdown", out::format_int(run.rejections_max_drawdown));
+            out::key_value("Daily loss", out::format_int(run.rejections_daily_loss));
+            out::key_value("Reward/risk", out::format_int(run.rejections_reward_risk));
+            out::key_value(
+                "Expected net edge",
+                out::format_int(run.rejections_expected_net_edge),
+            );
+            out::key_value("Other", out::format_int(run.rejections_other));
+            out::blank();
+
+            out::subsection("Audit");
+            out::key_value("Passed", if run.audit_passed { "true" } else { "false" });
+            out::key_value("Errors", out::format_int(run.audit_error_count));
+            out::key_value("Warnings", out::format_int(run.audit_warning_count));
             if !run.audit_passed {
-                println!(
-                    "  Warning: audit found {} error(s) — check audit_report.json",
-                    run.audit_error_count
-                );
+                println!("Audit errors (see audit_report.json):");
                 for (code, msg) in &run.audit_errors {
-                    println!("    [ERROR] {code} — {msg}");
+                    out::bullet(format!("[ERROR] {code} - {msg}"));
                 }
             }
-            println!();
+            out::blank();
 
-            println!("  Attribution summary:");
-            println!("    Unique signals:         {}", run.attr_unique_signal_ids);
-            println!(
-                "    Avg expected edge bps:  {:.2}",
-                run.attr_avg_expected_edge_bps
+            out::subsection("Attribution");
+            out::key_value(
+                "Unique signals",
+                out::format_int(run.attr_unique_signal_ids),
             );
-            println!(
-                "    Avg actual edge bps:    {:.2}",
-                run.attr_avg_actual_edge_bps
+            out::key_value(
+                "Avg expected edge",
+                format!("{:.2} bps", run.attr_avg_expected_edge_bps),
             );
-            println!(
-                "    Edge realization bps:   {:.2}",
-                run.attr_edge_realization_bps
+            out::key_value(
+                "Avg actual edge",
+                format!("{:.2} bps", run.attr_avg_actual_edge_bps),
             );
-            println!();
+            out::key_value(
+                "Edge realization",
+                format!("{:.2} bps", run.attr_edge_realization_bps),
+            );
+            out::blank();
 
-            println!("  Phase 7 reports written:");
-            println!("    {}/attribution_summary.json", cfg.reports_dir);
-            println!("    {}/attribution_by_regime.csv", cfg.reports_dir);
-            println!("    {}/attribution_by_exit_reason.csv", cfg.reports_dir);
-            println!("    {}/attribution_by_side.csv", cfg.reports_dir);
-            println!("    {}/attribution_by_filter.csv", cfg.reports_dir);
-            println!("    {}/attribution_by_strategy.csv", cfg.reports_dir);
-            println!("    {}/audit_report.json", cfg.reports_dir);
-            println!("    {}/report_manifest.json", cfg.reports_dir);
-            println!("Phase 7 attribution reports written.");
-            println!();
+            print_reports_written(&cfg.reports_dir);
 
             let d = &run.trade_distribution;
-            println!("  Diagnostic reports written:");
-            println!("    {}/signal_diagnostics.csv", cfg.reports_dir);
-            println!("    {}/rejection_by_stage_reason.csv", cfg.reports_dir);
-            println!("    {}/monthly_summary.csv", cfg.reports_dir);
-            println!("    {}/cost_edge_distribution.csv", cfg.reports_dir);
-            println!("    {}/trade_distribution_summary.json", cfg.reports_dir);
-            println!("Diagnostics:");
-            println!("  avg total cost bps:        {:.2}", d.avg_total_cost_bps);
-            println!(
-                "  avg edge realization bps:  {:.2}",
-                d.avg_edge_realization_bps
+            out::subsection("Diagnostics");
+            out::key_value("Avg total cost", format!("{:.2} bps", d.avg_total_cost_bps));
+            out::key_value(
+                "Avg edge realization",
+                format!("{:.2} bps", d.avg_edge_realization_bps),
             );
             if !d.dominant_rejection_reason.is_empty() {
-                println!(
-                    "  dominant rejection:        {} ({})",
-                    d.dominant_rejection_reason, d.dominant_rejection_count
+                out::key_value(
+                    "Dominant rejection",
+                    format!(
+                        "{} ({})",
+                        d.dominant_rejection_reason,
+                        out::format_int(d.dominant_rejection_count)
+                    ),
                 );
             }
-            println!();
+            out::blank();
         }
     }
+}
+
+const BASE_REPORT_FILES: &[&str] = &[
+    "backtest_summary.json",
+    "trades.csv",
+    "equity_curve.csv",
+    "risk_rejections.csv",
+    "signal_flow_summary.json",
+];
+
+const ATTRIBUTION_REPORT_FILES: &[&str] = &[
+    "attribution_summary.json",
+    "attribution_by_regime.csv",
+    "attribution_by_exit_reason.csv",
+    "attribution_by_side.csv",
+    "attribution_by_filter.csv",
+    "attribution_by_strategy.csv",
+    "audit_report.json",
+    "report_manifest.json",
+];
+
+const DIAGNOSTIC_REPORT_FILES: &[&str] = &[
+    "signal_diagnostics.csv",
+    "rejection_by_stage_reason.csv",
+    "monthly_summary.csv",
+    "cost_edge_distribution.csv",
+    "trade_distribution_summary.json",
+];
+
+fn print_reports_written(reports_dir: &str) {
+    out::subsection("Reports Written");
+    out::key_value("Directory", reports_dir);
+    println!("Base:");
+    for file in BASE_REPORT_FILES {
+        out::bullet(file);
+    }
+    println!("Attribution:");
+    for file in ATTRIBUTION_REPORT_FILES {
+        out::bullet(file);
+    }
+    println!("Diagnostics:");
+    for file in DIAGNOSTIC_REPORT_FILES {
+        out::bullet(file);
+    }
+    out::blank();
 }
 
 // ── Data quality printer ──────────────────────────────────────────────────────
@@ -677,38 +670,35 @@ fn print_data_quality(
         .filter(|i| i.kind == DataQualityIssueKind::DuplicateTimestamp)
         .count();
 
-    println!("Symbol:                {symbol}");
-    println!(
-        "Source:                {}",
-        data_paths
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
+    out::subsection(&format!("Symbol: {symbol}"));
+    println!("Data files:");
+    for (idx, path) in data_paths.iter().enumerate() {
+        out::numbered(idx + 1, path.display());
+    }
+    out::blank();
+    out::subsection("Data Summary");
+    out::key_value(
+        &format!("Raw {} candles", cfg.source_timeframe),
+        out::format_int(store.raw_1m.len()),
     );
-    println!(
-        "Raw {} candles:        {}",
-        cfg.source_timeframe,
-        store.raw_1m.len()
+    out::key_value(
+        &format!("Entry {} candles", store.entry_tf),
+        out::format_int(store.entry_len()),
     );
-    println!(
-        "Entry ({}) candles:   {}",
-        store.entry_tf,
-        store.entry_len()
+    out::key_value(
+        &format!("Confirm {} candles", store.confirmation_tf),
+        out::format_int(store.confirmation_len()),
     );
-    println!(
-        "Confirmation ({}) candles: {}",
-        store.confirmation_tf,
-        store.confirmation_len()
+    out::key_value(
+        &format!("Screen {} candles", store.screening_tf),
+        out::format_int(store.screening_len()),
     );
-    println!(
-        "Screening ({}) candles: {}",
-        store.screening_tf,
-        store.screening_len()
+    out::key_value(
+        "Data quality errors",
+        out::format_int(quality.error_count()),
     );
-    println!("Data quality errors:   {}", quality.error_count());
-    println!("Duplicate timestamps:  {dup_count}");
-    println!("Missing gaps:          {}", quality.missing_gaps.len());
+    out::key_value("Duplicate timestamps", out::format_int(dup_count));
+    out::key_value("Missing gaps", out::format_int(quality.missing_gaps.len()));
 
     if quality.error_count() > 0 {
         println!();
@@ -735,4 +725,21 @@ fn print_data_quality(
 
     println!();
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn report_groups_use_filenames_without_directory_prefixes() {
+        for file in BASE_REPORT_FILES
+            .iter()
+            .chain(ATTRIBUTION_REPORT_FILES.iter())
+            .chain(DIAGNOSTIC_REPORT_FILES.iter())
+        {
+            assert!(!file.contains('/'));
+            assert!(!file.is_empty());
+        }
+    }
 }

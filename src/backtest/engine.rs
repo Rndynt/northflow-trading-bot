@@ -37,6 +37,7 @@ use crate::indicators::{IndicatorEngine, IndicatorSnapshot};
 use crate::market::CandleStore;
 use crate::risk::{CostModelConfig, RiskConfig, RiskContext, RiskEngine};
 use crate::strategy::{MultiTimeframeInput, Strategy, StrategyContext};
+use std::time::Instant;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TimeframeRoles {
@@ -160,18 +161,11 @@ impl BacktestEngine {
 
         let entry_candles = &store.entry_candles;
         let n = entry_candles.len();
+        let mut progress = BacktestProgress::new(n);
+        progress.tick(0, 0);
 
         for i in 0..n {
             let candle = entry_candles[i];
-
-            if i > 0 && i % 50_000 == 0 {
-                println!(
-                    "  Backtest progress: {}/{} entry candles ({:.1}%)",
-                    i,
-                    n,
-                    i as f64 / n as f64 * 100.0
-                );
-            }
 
             // Update entry-timeframe indicator engine.
             let entry_snapshot = eng_entry.next(candle)?;
@@ -431,6 +425,8 @@ impl BacktestEngine {
                     }
                 }
             }
+
+            progress.tick(i + 1, trades.len());
         }
 
         // ── End of backtest: close any remaining position ─────────────────────
@@ -459,11 +455,7 @@ impl BacktestEngine {
         signal_flow.entry_geometry_mode = bt_cfg.entry_geometry_mode.as_str().to_string();
         signal_flow.finalise(&risk_rejections, trades.len());
 
-        println!(
-            "  Backtest complete: {} trades, final equity {:.2}",
-            trades.len(),
-            equity
-        );
+        progress.finish(trades.len());
 
         let summary = Metrics::summarize(&trades, &equity_curve);
 
@@ -475,6 +467,102 @@ impl BacktestEngine {
             signal_flow,
         })
     }
+}
+
+struct BacktestProgress {
+    total: usize,
+    last_bucket: Option<usize>,
+    started_at: Instant,
+}
+
+impl BacktestProgress {
+    fn new(total: usize) -> Self {
+        Self {
+            total,
+            last_bucket: None,
+            started_at: Instant::now(),
+        }
+    }
+
+    fn tick(&mut self, current: usize, trades: usize) {
+        let percent = if self.total == 0 {
+            100.0
+        } else {
+            current as f64 / self.total as f64 * 100.0
+        };
+        let bucket = if current >= self.total {
+            10
+        } else {
+            (percent.floor() as usize / 10).min(9)
+        };
+        if self.last_bucket == Some(bucket) {
+            return;
+        }
+        self.last_bucket = Some(bucket);
+        println!(
+            "  {}",
+            format_progress_line(
+                current.min(self.total),
+                self.total,
+                trades,
+                self.started_at.elapsed().as_secs(),
+                30
+            )
+        );
+    }
+
+    fn finish(&mut self, trades: usize) {
+        self.tick(self.total, trades);
+    }
+}
+
+fn format_progress_line(
+    current: usize,
+    total: usize,
+    trades: usize,
+    elapsed_secs: u64,
+    width: usize,
+) -> String {
+    let percent = if total == 0 {
+        100.0
+    } else {
+        current as f64 / total as f64 * 100.0
+    };
+    let filled = if total == 0 {
+        width
+    } else {
+        ((percent / 100.0) * width as f64).round() as usize
+    }
+    .min(width);
+    format!(
+        "[{}{}] {:>5.1}% {}/{} candles | trades: {} | elapsed: {}",
+        "#".repeat(filled),
+        "-".repeat(width.saturating_sub(filled)),
+        percent,
+        format_usize(current),
+        format_usize(total),
+        format_usize(trades),
+        format_elapsed(elapsed_secs)
+    )
+}
+
+fn format_usize(value: usize) -> String {
+    let s = value.to_string();
+    let mut out = String::with_capacity(s.len() + s.len() / 3);
+    let first_group = s.len() % 3;
+    for (idx, ch) in s.chars().enumerate() {
+        if idx > 0 && (idx == first_group || (idx > first_group && (idx - first_group) % 3 == 0)) {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn format_elapsed(seconds: u64) -> String {
+    let minutes = seconds / 60;
+    let secs = seconds % 60;
+    format!("{minutes:02}:{secs:02}")
 }
 
 // ── Helper: latest completed snapshot with ts <= max_ts ───────────────────────
@@ -707,6 +795,13 @@ mod tests {
             entry_lookback_bars: 120,
             cooldown_bars: 0,
         }
+    }
+
+    #[test]
+    fn progress_formatter_renders_key_percentages() {
+        assert!(format_progress_line(0, 100, 0, 0, 10).contains("  0.0%"));
+        assert!(format_progress_line(50, 100, 3, 1, 10).contains(" 50.0%"));
+        assert!(format_progress_line(100, 100, 9, 2, 10).contains("100.0%"));
     }
 
     #[test]
