@@ -405,7 +405,10 @@ mod tests {
         )
         .unwrap();
         let content = std::fs::read_to_string(format!("{dir}/backtest_summary.json")).unwrap();
-        assert!(content.contains("\"total_trades\""), "missing field: {content}");
+        assert!(
+            content.contains("\"total_trades\""),
+            "missing field: {content}"
+        );
         assert!(content.contains("\"win_rate\""));
         assert!(content.contains("\"net_pnl\""));
         std::fs::remove_dir_all(&dir).ok();
@@ -426,8 +429,14 @@ mod tests {
         let content = std::fs::read_to_string(format!("{dir}/trades.csv")).unwrap();
         assert!(content.contains("TRD-SIG-BT-00000001"), "trade_id missing");
         assert!(content.contains("BTCUSDT"), "symbol missing");
-        assert!(content.contains("position_size_usd"), "position size header missing");
-        assert!(content.contains("3000.000000"), "entry notional missing: {content}");
+        assert!(
+            content.contains("position_size_usd"),
+            "position size header missing"
+        );
+        assert!(
+            content.contains("3000.000000"),
+            "entry notional missing: {content}"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
