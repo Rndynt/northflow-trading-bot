@@ -264,7 +264,7 @@ mod tests {
             signal_id: SignalId::new(signal_id),
             position_id: PositionId::new(format!("POS-{signal_id}")),
             symbol: Symbol::new("BTCUSDT").unwrap(),
-            strategy_id: StrategyId::new("screened_vwap_scalp"),
+            strategy_id: StrategyId::new("basic_sample_strategy"),
             regime: regime.to_string(),
             side,
             entry_time: 1_700_000_000_000,
@@ -451,33 +451,30 @@ mod tests {
     }
 
     #[test]
-    fn attribution_by_strategy_groups_v1_or_v2() {
-        let mut v1_trade = win();
-        v1_trade.strategy_id = StrategyId::new("screened_vwap_scalp");
+    fn attribution_by_strategy_groups_basic_sample() {
+        let mut first_trade = win();
+        first_trade.strategy_id = StrategyId::new("basic_sample_strategy");
 
-        let mut v2_trade = loss();
-        v2_trade.strategy_id = StrategyId::new("screened_vwap_scalp_v2");
-        v2_trade.trade_id = TradeId::new("TRD-SIG-BT-00000099");
-        v2_trade.signal_id = SignalId::new("SIG-BT-00000099");
+        let mut second_trade = loss();
+        second_trade.strategy_id = StrategyId::new("basic_sample_strategy");
+        second_trade.trade_id = TradeId::new("TRD-SIG-BT-00000099");
+        second_trade.signal_id = SignalId::new("SIG-BT-00000099");
 
-        let r = AttributionEngine::build(&[v1_trade, v2_trade]);
-        assert_eq!(r.by_strategy.len(), 2, "two strategy buckets expected");
+        let r = AttributionEngine::build(&[first_trade, second_trade]);
+        assert_eq!(
+            r.by_strategy.len(),
+            1,
+            "one production strategy bucket expected"
+        );
 
-        let v1_bucket = r
+        let bucket = r
             .by_strategy
             .iter()
-            .find(|b| b.key == "screened_vwap_scalp")
-            .expect("v1 bucket must exist");
-        assert_eq!(v1_bucket.trades, 1);
-        assert_eq!(v1_bucket.wins, 1);
-
-        let v2_bucket = r
-            .by_strategy
-            .iter()
-            .find(|b| b.key == "screened_vwap_scalp_v2")
-            .expect("v2 bucket must exist");
-        assert_eq!(v2_bucket.trades, 1);
-        assert_eq!(v2_bucket.losses, 1);
+            .find(|b| b.key == "basic_sample_strategy")
+            .expect("basic sample bucket must exist");
+        assert_eq!(bucket.trades, 2);
+        assert_eq!(bucket.wins, 1);
+        assert_eq!(bucket.losses, 1);
     }
 
     #[test]

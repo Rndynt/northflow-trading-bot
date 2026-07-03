@@ -359,11 +359,11 @@ BTCUSDT = [
 ]
 
 [strategy]
-strategy_id = "screened_vwap_scalp_v2"
+strategy_id = "basic_sample_strategy"
 strategy_run_mode = "single"
-strategies = ["screened_vwap_scalp_v2"]
+strategies = ["basic_sample_strategy"]
 
-[strategy.screened_vwap_scalp_v2]
+[strategy.basic_sample_strategy]
 require_strict_confirmation = true
 require_ema_ribbon_alignment = true
 allow_neutral_confirmation = false

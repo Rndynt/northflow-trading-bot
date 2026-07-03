@@ -955,7 +955,7 @@ mod tests {
             signal_id: SignalId::new(&sid),
             position_id: PositionId::new(&pid),
             symbol: Symbol::new("BTCUSDT").unwrap(),
-            strategy_id: StrategyId::new("screened_vwap_scalp"),
+            strategy_id: StrategyId::new("basic_sample_strategy"),
             regime: "bullish".to_string(),
             side: Side::Long,
             entry_time,

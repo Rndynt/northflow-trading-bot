@@ -382,7 +382,7 @@ impl BacktestEngine {
             // Skipped on the candle where an entry was just opened to avoid
             // evaluating a new signal before the just-opened trade has had a
             // chance to develop.
-            // Cooldown: if v2_cooldown_bars > 0, skip strategy evaluation for
+            // Cooldown: if strategy cooldown > 0, skip strategy evaluation for
             // that many bars after the last signal was preapproved.
             let in_cooldown = cooldown_bars > 0
                 && last_signal_bar.map_or(false, |last| i.saturating_sub(last) <= cooldown_bars);
@@ -771,7 +771,7 @@ mod tests {
         Signal {
             signal_id: SignalId::new("SIG-BT-00000001"),
             symbol: Symbol::new("BTCUSDT").unwrap(),
-            strategy_id: StrategyId::new("screened_vwap_scalp"),
+            strategy_id: StrategyId::new("basic_sample_strategy"),
             side: Side::Long,
             entry_timeframe: Timeframe::OneMinute,
             screening_timeframe: Timeframe::FifteenMinute,
@@ -844,7 +844,7 @@ mod tests {
 
         let mut cfg = default_cfg();
         cfg.data_dir = dir.to_string();
-        cfg.strategy_id = "screened_vwap_scalp".to_string();
+        cfg.strategy_id = "basic_sample_strategy".to_string();
 
         let result = BacktestEngine::run(&cfg, &sym);
         assert!(result.is_ok(), "v1 strategy must not return Err");
@@ -853,7 +853,7 @@ mod tests {
     }
 
     #[test]
-    fn backtest_selects_v2_from_config() {
+    fn backtest_selects_basic_sample_from_config() {
         let dir = "/tmp";
         let sym = format!("nf_v2sel_{}", std::process::id());
         let path = format!("{dir}/{sym}.csv");
@@ -861,7 +861,7 @@ mod tests {
 
         let mut cfg = default_cfg();
         cfg.data_dir = dir.to_string();
-        cfg.strategy_id = "screened_vwap_scalp_v2".to_string();
+        cfg.strategy_id = "basic_sample_strategy".to_string();
 
         let result = BacktestEngine::run(&cfg, &sym);
         assert!(
@@ -873,7 +873,7 @@ mod tests {
     }
 
     #[test]
-    fn backtest_selects_vwap_reclaim_short_from_config() {
+    fn backtest_rejects_unknown_strategy_from_config() {
         let dir = "/tmp";
         let sym = format!("nf_vrssel_{}", std::process::id());
         let path = format!("{dir}/{sym}.csv");
@@ -881,20 +881,20 @@ mod tests {
 
         let mut cfg = default_cfg();
         cfg.data_dir = dir.to_string();
-        cfg.strategy_id = "vwap_reclaim_short_v1".to_string();
+        cfg.strategy_id = "basic_sample_strategy".to_string();
         cfg.entry_lookback_bars = 80;
 
         let result = BacktestEngine::run(&cfg, &sym);
         assert!(
             result.is_ok(),
-            "vwap_reclaim_short_v1 strategy must not return Err: {result:?}"
+            "basic_sample_strategy strategy must not return Err: {result:?}"
         );
         assert!(result.unwrap().is_some(), "expected Some for valid CSV");
         std::fs::remove_file(&path).ok();
     }
 
     #[test]
-    fn v2_trade_reports_strategy_id() {
+    fn basic_sample_trade_reports_strategy_id() {
         let dir = "/tmp";
         let sym = format!("nf_v2sid_{}", std::process::id());
         let path = format!("{dir}/{sym}.csv");
@@ -902,7 +902,7 @@ mod tests {
 
         let mut cfg = default_cfg();
         cfg.data_dir = dir.to_string();
-        cfg.strategy_id = "screened_vwap_scalp_v2".to_string();
+        cfg.strategy_id = "basic_sample_strategy".to_string();
 
         let result = BacktestEngine::run(&cfg, &sym)
             .expect("v2 must not error")
@@ -912,7 +912,7 @@ mod tests {
         for trade in &result.trades {
             assert_eq!(
                 trade.strategy_id.as_str(),
-                "screened_vwap_scalp_v2",
+                "basic_sample_strategy",
                 "trade strategy_id must match active strategy"
             );
         }
@@ -1376,7 +1376,7 @@ mod tests {
         let signal = Signal {
             signal_id: SignalId::new("SIG-BT-00000002"),
             symbol: Symbol::new("BTCUSDT").unwrap(),
-            strategy_id: StrategyId::new("screened_vwap_scalp"),
+            strategy_id: StrategyId::new("basic_sample_strategy"),
             side: Side::Short,
             entry_timeframe: Timeframe::OneMinute,
             screening_timeframe: Timeframe::FifteenMinute,

@@ -129,7 +129,7 @@ mod tests {
             signal_id: SignalId::new("SIG-BT-00000001"),
             position_id: PositionId::new("POS-00000001"),
             symbol: Symbol::new("BTCUSDT").unwrap(),
-            strategy_id: StrategyId::new("screened_vwap_scalp"),
+            strategy_id: StrategyId::new("basic_sample_strategy"),
             regime: "bullish".to_string(),
             side: Side::Long,
             entry_time: 1_700_000_000,

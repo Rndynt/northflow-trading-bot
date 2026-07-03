@@ -19,23 +19,8 @@ BTCUSDT = [
 ]
 
 [strategy]
-strategy_id = "screened_vwap_scalp_v2"
+strategy_id = "basic_sample_strategy"
 min_confidence = 90
-v2_require_strict_confirmation = true
-v2_require_ema_ribbon_alignment = true
-v2_allow_neutral_confirmation = false
-v2_min_expected_reward_bps = 24.0
-v2_min_expected_net_edge_bps = 10.0
-v2_min_atr_bps = 12.0
-v2_max_atr_bps = 90.0
-v2_tp_atr_multiple = 1.8
-v2_sl_atr_multiple = 1.0
-v2_min_volume_ratio = 1.40
-v2_vwap_distance_atr_min = 0.0
-v2_vwap_distance_atr_max = 0.45
-v2_cooldown_bars = 12
-v2_enable_long = true
-v2_enable_short = true
 
 [risk]
 initial_equity_usd = 5000.0
@@ -55,10 +40,10 @@ stop_slippage_bps = 5.0
 
 [backtest]
 data_dir = "data/historical"
-reports_dir = "reports/svs2_btc_entry1m_momentum_quality_2020_2025"
+reports_dir = "reports/basic_sample_btc_entry1m_2020_2025"
 conservative_intrabar = true
 max_bars_held = 18
 entry_geometry_mode = "reanchor_to_actual_entry"
 entry_lookback_bars = 120
 strategy_run_mode = "single"
-strategies = ["screened_vwap_scalp_v2"]
+strategies = ["basic_sample_strategy"]
