@@ -71,7 +71,9 @@ impl Strategy for ScreenedVwapScalpV2 {
             return Ok(None);
         }
 
-        if self.cfg.require_ema_ribbon_alignment && !ema_ribbon_passes(side, ema_8, ema_21, ema_50_entry, close) {
+        if self.cfg.require_ema_ribbon_alignment
+            && !ema_ribbon_passes(side, ema_8, ema_21, ema_50_entry, close)
+        {
             return Ok(None);
         }
 
@@ -223,7 +225,13 @@ fn ema_ribbon_passes(side: Side, ema_8: f64, ema_21: f64, ema_50: f64, close: f6
     }
 }
 
-fn price_action_trigger(side: Side, candle: crate::core::Candle, ema_21: f64, vwap: f64, atr: f64) -> TriggerCheck {
+fn price_action_trigger(
+    side: Side,
+    candle: crate::core::Candle,
+    ema_21: f64,
+    vwap: f64,
+    atr: f64,
+) -> TriggerCheck {
     let range = candle.high - candle.low;
     let body_ratio = if range > 0.0 {
         (candle.close - candle.open).abs() / range
@@ -400,14 +408,18 @@ mod tests {
     fn emits_long_when_price_action_trigger_passes() {
         let sig = strat().evaluate(&ctx(), &long_input()).unwrap().unwrap();
         assert_eq!(sig.side, Side::Long);
-        assert!(sig.filters_passed.contains(&"price_action_trigger_ok".to_string()));
+        assert!(sig
+            .filters_passed
+            .contains(&"price_action_trigger_ok".to_string()));
     }
 
     #[test]
     fn emits_short_when_price_action_trigger_passes() {
         let sig = strat().evaluate(&ctx(), &short_input()).unwrap().unwrap();
         assert_eq!(sig.side, Side::Short);
-        assert!(sig.filters_passed.contains(&"price_action_trigger_ok".to_string()));
+        assert!(sig
+            .filters_passed
+            .contains(&"price_action_trigger_ok".to_string()));
     }
 
     #[test]
