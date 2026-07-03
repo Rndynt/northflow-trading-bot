@@ -37,8 +37,8 @@ use crate::indicators::{IndicatorEngine, IndicatorSnapshot};
 use crate::market::{CandleStore, OhlcvLoader};
 use crate::risk::{CostModelConfig, RiskContext, RiskEngine};
 use crate::strategy::{
-    EmaTrendPullbackV1, MultiTimeframeInput, ScreenedVwapScalp, ScreenedVwapScalpV2, Strategy,
-    StrategyContext, VwapReclaimShortV1, VwapReclaimShortV2,
+    EmaTrendPullbackV1, MeanRevertV1, MultiTimeframeInput, ScreenedVwapScalp, ScreenedVwapScalpV2,
+    Strategy, StrategyContext, VwapReclaimShortV1, VwapReclaimShortV2,
 };
 
 // ── ActiveStrategy ────────────────────────────────────────────────────────────
@@ -49,6 +49,7 @@ enum ActiveStrategy {
     Etp(EmaTrendPullbackV1),
     Vrs(VwapReclaimShortV1),
     Vrs2(VwapReclaimShortV2),
+    Mr(MeanRevertV1),
 }
 
 impl ActiveStrategy {
@@ -63,6 +64,7 @@ impl ActiveStrategy {
             Self::Etp(s) => s.evaluate(ctx, input),
             Self::Vrs(s) => s.evaluate(ctx, input),
             Self::Vrs2(s) => s.evaluate(ctx, input),
+            Self::Mr(s) => s.evaluate(ctx, input),
         }
     }
 }
@@ -222,6 +224,7 @@ impl BacktestEngine {
             "vwap_reclaim_short_v2" => {
                 ActiveStrategy::Vrs2(VwapReclaimShortV2::new(cfg.vrs2_config()))
             }
+            "mean_revert_v1" => ActiveStrategy::Mr(MeanRevertV1::new(cfg.v2_config())),
             other => {
                 return Err(NorthflowError::ConfigError(format!(
                     "unknown strategy_id: '{other}'"

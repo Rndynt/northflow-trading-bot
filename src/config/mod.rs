@@ -816,6 +816,8 @@ impl ResearchConfig {
             "ema_trend_pullback_v1" => self.etp_cooldown_bars,
             "vwap_reclaim_short_v1" => self.vrs_cooldown_bars,
             "vwap_reclaim_short_v2" => self.vrs2_cooldown_bars,
+            "mean_revert_v1" => self.v2_cooldown_bars,
+            "mean_revert_v1" => self.v2_cooldown_bars,
             _ => 0,
         }
     }
@@ -847,7 +849,7 @@ impl ResearchConfig {
     /// Must be called before the backtest engine uses the strategy.
     pub fn validate_strategy_config(&self) -> Result<(), NorthflowError> {
         match self.strategy_id.as_str() {
-            "screened_vwap_scalp" | "screened_vwap_scalp_v2" => {}
+            "screened_vwap_scalp" | "screened_vwap_scalp_v2" | "mean_revert_v1" => {}
             "ema_trend_pullback_v1" => {
                 return self.validate_etp_config();
             }
@@ -861,7 +863,7 @@ impl ResearchConfig {
                 return Err(NorthflowError::ConfigError(format!(
                     "unknown strategy_id: '{other}'. \
                      Valid values: 'screened_vwap_scalp', 'screened_vwap_scalp_v2', \
-                     'ema_trend_pullback_v1', 'vwap_reclaim_short_v1', 'vwap_reclaim_short_v2'"
+                     'ema_trend_pullback_v1', 'vwap_reclaim_short_v1', 'vwap_reclaim_short_v2', 'mean_revert_v1', 'vwap_reclaim_short_v2', 'mean_revert_v1'"
                 )));
             }
         }
@@ -1184,12 +1186,13 @@ impl ResearchConfig {
                 | "screened_vwap_scalp_v2"
                 | "ema_trend_pullback_v1"
                 | "vwap_reclaim_short_v1"
-                | "vwap_reclaim_short_v2" => {}
+                | "vwap_reclaim_short_v2"
+                | "mean_revert_v1" => {}
                 other => {
                     return Err(NorthflowError::ConfigError(format!(
                         "unknown strategy in strategies list: '{other}'. \
                          Valid values: 'screened_vwap_scalp', 'screened_vwap_scalp_v2', \
-                         'ema_trend_pullback_v1', 'vwap_reclaim_short_v1'"
+                         'ema_trend_pullback_v1', 'vwap_reclaim_short_v1', 'vwap_reclaim_short_v2', 'mean_revert_v1'"
                     )));
                 }
             }
