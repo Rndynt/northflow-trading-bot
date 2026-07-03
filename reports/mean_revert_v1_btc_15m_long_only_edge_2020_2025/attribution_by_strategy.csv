@@ -1,0 +1,2 @@
+key,trades,wins,losses,win_rate,net_pnl,gross_pnl,total_fee,total_slippage,avg_net_pnl,avg_expected_edge_bps,avg_actual_edge_bps,avg_bars_held
+mean_revert_v1,16,6,10,37.500000,-48.770843,11.430876,27.512217,32.689502,-3.048178,93.917679,3.422910,7.625000
