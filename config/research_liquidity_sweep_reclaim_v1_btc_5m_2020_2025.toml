@@ -1,0 +1,48 @@
+[mode]
+run_mode = "research"
+dry_run = true
+
+[pairs]
+symbols = ["BTCUSDT"]
+entry_timeframe = "5m"
+screening_timeframe = "1h"
+confirmation_timeframe = "15m"
+
+[historical_files]
+BTCUSDT = [
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2020.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2021.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2022.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2023.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2024.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2025.csv",
+]
+
+[strategy]
+strategy_id = "liquidity_sweep_reclaim_v1"
+min_confidence = 70
+
+[risk]
+initial_equity_usd = 5000.0
+risk_per_trade_pct = 0.15
+max_open_positions = 1
+min_reward_risk = 1.5
+max_daily_loss_pct = 3.0
+max_drawdown_pct = 100.0
+
+[cost]
+taker_fee_bps = 5.0
+slippage_bps = 0.0
+spread_bps = 0.0
+market_impact_bps = 0.0
+stop_slippage_bps = 0.0
+
+[backtest]
+data_dir = "data/historical"
+reports_dir = "reports/liquidity_sweep_reclaim_v1_btc_5m_2020_2025"
+conservative_intrabar = true
+max_bars_held = 30
+entry_geometry_mode = "reanchor_to_actual_entry"
+entry_lookback_bars = 120
+strategy_run_mode = "single"
+strategies = ["liquidity_sweep_reclaim_v1"]
