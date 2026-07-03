@@ -29,7 +29,7 @@ impl ReportWriter {
         })?;
 
         Self::write_summary_json(dir, summary)?;
-        Self::write_trades_csv(dir, trades)?;
+        Self::write_trades_csv(dir, trades, equity_curve)?;
         Self::write_equity_csv(dir, equity_curve)?;
         Self::write_risk_rejections_csv(dir, risk_rejections)?;
         Self::write_signal_flow_summary_json(dir, signal_flow)?;
@@ -86,25 +86,32 @@ impl ReportWriter {
 
     // ── Trades CSV ────────────────────────────────────────────────────────────
 
-    fn write_trades_csv(dir: &Path, trades: &[Trade]) -> Result<(), NorthflowError> {
+    fn write_trades_csv(
+        dir: &Path,
+        trades: &[Trade],
+        equity_curve: &[EquityPoint],
+    ) -> Result<(), NorthflowError> {
         let path = dir.join("trades.csv");
         let mut rows: Vec<String> = Vec::with_capacity(trades.len() + 1);
         rows.push(
             "trade_id,signal_id,symbol,strategy_id,regime,side,\
              entry_time,exit_time,entry_price,exit_price,stop_loss,take_profit,qty,\
              position_size_usd,entry_notional_usd,exit_notional_usd,avg_notional_usd,\
-             round_trip_notional_usd,fee_bps_round_trip,\
+             round_trip_notional_usd,fee_bps_round_trip,equity_at_entry_usd,\
+             risk_amount_usd,risk_per_unit_usd,stop_distance_bps,risk_pct_of_equity,leverage_used,\
              gross_pnl,fee,slippage,net_pnl,reward_risk,bars_held,exit_reason,\
              entry_reason,filters_passed,filters_failed,expected_edge_bps,actual_edge_bps"
                 .to_string(),
         );
 
+        let mut equity_at_entry = initial_equity_from_curve(equity_curve);
+
         for t in trades {
             let filters_passed = t.filters_passed.join("|");
             let filters_failed = t.filters_failed.join("|");
-            let notional = trade_notional_audit(t);
+            let notional = trade_notional_audit(t, equity_at_entry);
             let row = format!(
-                "{},{},{},{},{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.8},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{},{},{},{:.6},{:.6}",
+                "{},{},{},{},{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.8},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{},{},{},{:.6},{:.6}",
                 csv_escape(t.trade_id.as_str()),
                 csv_escape(t.signal_id.as_str()),
                 csv_escape(t.symbol.as_str()),
@@ -124,6 +131,12 @@ impl ReportWriter {
                 notional.avg_notional_usd,
                 notional.round_trip_notional_usd,
                 notional.fee_bps_round_trip,
+                notional.equity_at_entry_usd,
+                notional.risk_amount_usd,
+                notional.risk_per_unit_usd,
+                notional.stop_distance_bps,
+                notional.risk_pct_of_equity,
+                notional.leverage_used,
                 t.gross_pnl,
                 t.fee,
                 t.slippage,
@@ -138,6 +151,10 @@ impl ReportWriter {
                 t.actual_edge_bps,
             );
             rows.push(row);
+
+            if equity_at_entry > 0.0 {
+                equity_at_entry += t.net_pnl;
+            }
         }
 
         let content = rows.join("\n") + "\n";
@@ -254,9 +271,15 @@ struct TradeNotionalAudit {
     avg_notional_usd: f64,
     round_trip_notional_usd: f64,
     fee_bps_round_trip: f64,
+    equity_at_entry_usd: f64,
+    risk_amount_usd: f64,
+    risk_per_unit_usd: f64,
+    stop_distance_bps: f64,
+    risk_pct_of_equity: f64,
+    leverage_used: f64,
 }
 
-fn trade_notional_audit(t: &Trade) -> TradeNotionalAudit {
+fn trade_notional_audit(t: &Trade, equity_at_entry_usd: f64) -> TradeNotionalAudit {
     // `quantity` is base asset quantity, e.g. BTC quantity for BTCUSDT.
     // Position size / notional must be shown in quote currency (USDT/USD).
     let entry_notional_usd = t.entry_price * t.quantity;
@@ -269,6 +292,24 @@ fn trade_notional_audit(t: &Trade) -> TradeNotionalAudit {
         0.0
     };
 
+    let risk_per_unit_usd = (t.entry_price - t.stop_loss).abs();
+    let risk_amount_usd = risk_per_unit_usd * t.quantity;
+    let stop_distance_bps = if t.entry_price > 0.0 {
+        risk_per_unit_usd / t.entry_price * 10_000.0
+    } else {
+        0.0
+    };
+    let risk_pct_of_equity = if equity_at_entry_usd > 0.0 {
+        risk_amount_usd / equity_at_entry_usd * 100.0
+    } else {
+        0.0
+    };
+    let leverage_used = if equity_at_entry_usd > 0.0 {
+        entry_notional_usd / equity_at_entry_usd
+    } else {
+        0.0
+    };
+
     TradeNotionalAudit {
         position_size_usd: entry_notional_usd,
         entry_notional_usd,
@@ -276,7 +317,17 @@ fn trade_notional_audit(t: &Trade) -> TradeNotionalAudit {
         avg_notional_usd,
         round_trip_notional_usd,
         fee_bps_round_trip,
+        equity_at_entry_usd,
+        risk_amount_usd,
+        risk_per_unit_usd,
+        stop_distance_bps,
+        risk_pct_of_equity,
+        leverage_used,
     }
+}
+
+fn initial_equity_from_curve(equity_curve: &[EquityPoint]) -> f64 {
+    equity_curve.first().map(|p| p.equity).unwrap_or(0.0)
 }
 
 // ── CSV helpers ───────────────────────────────────────────────────────────────
@@ -443,12 +494,17 @@ mod tests {
     #[test]
     fn trade_notional_audit_calculates_usd_size_and_fee_bps() {
         let t = test_trade();
-        let audit = trade_notional_audit(&t);
+        let audit = trade_notional_audit(&t, 5000.0);
         assert!((audit.position_size_usd - 3000.0).abs() < 1e-9);
         assert!((audit.entry_notional_usd - 3000.0).abs() < 1e-9);
         assert!((audit.exit_notional_usd - 3060.0).abs() < 1e-9);
         assert!((audit.round_trip_notional_usd - 6060.0).abs() < 1e-9);
         assert!((audit.fee_bps_round_trip - 5.0).abs() < 1e-9);
+        assert!((audit.risk_per_unit_usd - 300.0).abs() < 1e-9);
+        assert!((audit.risk_amount_usd - 30.0).abs() < 1e-9);
+        assert!((audit.stop_distance_bps - 100.0).abs() < 1e-9);
+        assert!((audit.risk_pct_of_equity - 0.6).abs() < 1e-9);
+        assert!((audit.leverage_used - 0.6).abs() < 1e-9);
     }
 
     #[test]
@@ -506,6 +562,12 @@ mod tests {
             "avg_notional_usd",
             "round_trip_notional_usd",
             "fee_bps_round_trip",
+            "equity_at_entry_usd",
+            "risk_amount_usd",
+            "risk_per_unit_usd",
+            "stop_distance_bps",
+            "risk_pct_of_equity",
+            "leverage_used",
             "gross_pnl",
             "fee",
             "slippage",
