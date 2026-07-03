@@ -1,1 +1,0 @@
-trade_id,signal_id,month,symbol,strategy_id,regime,side,entry_time,exit_time,duration_ms,entry_price,exit_price,stop_loss,take_profit,qty,gross_pnl,fee,slippage,total_cost,net_pnl,reward_risk,bars_held,exit_reason,expected_edge_bps,actual_edge_bps,edge_realization_bps,fee_bps,slippage_bps,total_cost_bps,net_pnl_bps,filters_passed,filters_failed,entry_reason

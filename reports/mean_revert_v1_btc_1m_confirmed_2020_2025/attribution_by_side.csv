@@ -1,3 +1,0 @@
-key,trades,wins,losses,win_rate,net_pnl,gross_pnl,total_fee,total_slippage,avg_net_pnl,avg_expected_edge_bps,avg_actual_edge_bps,avg_bars_held
-long,28,3,25,10.714286,-250.970555,-102.764388,64.064047,84.142120,-8.963234,53.607643,-34.948929,4.000000
-short,12,3,9,25.000000,-76.493208,-4.572212,32.899624,39.021372,-6.374434,36.375259,-22.455761,3.666667

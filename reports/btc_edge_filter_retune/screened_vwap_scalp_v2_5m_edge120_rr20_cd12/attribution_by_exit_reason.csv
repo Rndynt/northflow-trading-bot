@@ -1,3 +1,0 @@
-key,trades,wins,losses,win_rate,net_pnl,gross_pnl,total_fee,total_slippage,avg_net_pnl,avg_expected_edge_bps,avg_actual_edge_bps,avg_bars_held
-stop_loss,19,0,19,0.000000,-162.538666,-142.448073,20.090593,0.000000,-8.554667,154.378940,-84.717661,3.368421
-take_profit,7,7,0,100.000000,108.129948,115.424973,7.295024,0.000000,15.447135,166.751560,166.801233,8.142857

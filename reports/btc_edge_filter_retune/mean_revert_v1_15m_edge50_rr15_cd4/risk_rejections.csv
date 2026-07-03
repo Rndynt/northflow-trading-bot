@@ -1,5 +1,0 @@
-signal_id,stage,entry_geometry_mode,timestamp,side,regime,reason,equity,peak_equity,drawdown_pct,daily_realized_pnl,expected_reward_bps,expected_cost_bps,expected_net_edge_bps
-SIG-BT-00000003,initial_risk,reanchor_to_actual_entry,1582808400000,long,neutral,reward_risk_below_minimum,4982.308213,5000.000000,0.353836,0.000000,81.465894,10.000000,71.465894
-SIG-BT-00000008,initial_risk,reanchor_to_actual_entry,1643028300000,short,bearish,reward_risk_below_minimum,4964.583056,5000.000000,0.708339,0.000000,145.030977,10.000000,135.030977
-SIG-BT-00000012,initial_risk,reanchor_to_actual_entry,1653943500000,long,neutral,reward_risk_below_minimum,4962.118826,5000.000000,0.757623,0.000000,82.758416,10.000000,72.758416
-SIG-BT-00000026,initial_risk,reanchor_to_actual_entry,1683137700000,short,neutral,reward_risk_below_minimum,4973.498231,5010.752851,0.743493,0.000000,66.470215,10.000000,56.470215

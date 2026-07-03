@@ -1,2 +1,0 @@
-key,trades,wins,losses,win_rate,net_pnl,gross_pnl,total_fee,total_slippage,avg_net_pnl,avg_expected_edge_bps,avg_actual_edge_bps,avg_bars_held
-screened_vwap_scalp_v2,213,76,137,35.680751,-515.341906,-168.245566,347.096340,0.000000,-2.419446,59.951152,-14.357510,4.093897

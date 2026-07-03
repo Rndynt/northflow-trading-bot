@@ -1,3 +1,0 @@
-key,trades,wins,losses,win_rate,net_pnl,gross_pnl,total_fee,total_slippage,avg_net_pnl,avg_expected_edge_bps,avg_actual_edge_bps,avg_bars_held
-bearish,359,165,194,45.961003,-660.963718,-29.928047,631.035671,0.000000,-1.841125,28.809501,-11.973746,3.905292
-bullish,949,409,540,43.097998,-2436.747591,-249.646594,2187.100997,0.000000,-2.567700,16.260144,-11.259917,3.922023
