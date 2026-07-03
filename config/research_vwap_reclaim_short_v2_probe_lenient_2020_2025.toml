@@ -33,7 +33,7 @@ vrs2_min_atr_bps = 5.0
 vrs2_max_atr_bps = 80.0
 vrs2_min_reward_risk = 1.4
 vrs2_min_expected_reward_bps = 10.0
-vrs2_min_expected_net_edge_bps = -5.0
+vrs2_min_expected_net_edge_bps = 0.0
 vrs2_cooldown_bars = 0
 
 vrs2_max_anchor_range_atr = 20.0
