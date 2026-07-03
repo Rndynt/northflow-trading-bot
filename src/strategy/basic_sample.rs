@@ -7,6 +7,7 @@
 
 use crate::core::{NorthflowError, Side, Signal, SignalId, StrategyId};
 use crate::market::classify_basic_regime;
+use crate::strategy::ids::BASIC_SAMPLE_STRATEGY_ID;
 use crate::strategy::traits::{MultiTimeframeInput, Strategy, StrategyContext};
 
 #[derive(Debug, Clone)]
@@ -20,7 +21,7 @@ impl Default for BasicSampleStrategy {
 
 impl Strategy for BasicSampleStrategy {
     fn strategy_id(&self) -> &'static str {
-        "basic_sample_strategy"
+        BASIC_SAMPLE_STRATEGY_ID
     }
 
     fn evaluate(

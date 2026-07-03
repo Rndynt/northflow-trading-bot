@@ -1,6 +1,6 @@
 //! Backtest engine — Phase 6 + risk attribution patch + entry geometry mode patch.
 //!
-//! Deterministic 1m replay with conservative intrabar fill model.
+//! Deterministic configured entry-timeframe replay with conservative intrabar fill model.
 //! No live trading. No paper trading. No exchange calls.
 
 pub mod engine;
@@ -11,7 +11,9 @@ pub mod report;
 pub mod risk_trace;
 pub mod walk_forward;
 
-pub use engine::{BacktestConfig, BacktestEngine, BacktestResult};
+pub use engine::{
+    BacktestConfig, BacktestEngine, BacktestResult, BacktestRunInput, TimeframeRoles,
+};
 pub use fill_model::{EntryFill, ExitFill, FillModel, OpenSimPosition};
 pub use geometry::EntryGeometryMode;
 pub use metrics::{BacktestSummary, EquityPoint, Metrics};

@@ -8,6 +8,10 @@ entry_timeframe = "1m"
 screening_timeframe = "15m"
 confirmation_timeframe = "5m"
 
+[data]
+source_timeframe = "1m"
+data_dir = "data/historical"
+
 [historical_files]
 BTCUSDT = [
   "data/historical/BTCUSDT/1m/BTCUSDT-1m-2020.csv",
@@ -39,7 +43,6 @@ market_impact_bps = 1.0
 stop_slippage_bps = 5.0
 
 [backtest]
-data_dir = "data/historical"
 reports_dir = "reports/basic_sample_btc_entry1m_2020_2025"
 conservative_intrabar = true
 max_bars_held = 18
