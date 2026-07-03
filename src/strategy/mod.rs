@@ -4,6 +4,7 @@
 //!   screened_vwap_scalp    — original deterministic strategy
 //!   screened_vwap_scalp_v2 — stricter, cost-aware research variant
 //!   ema_trend_pullback_v1  — multi-timeframe EMA trend pullback candidate
+//!   liquidity_sweep_reclaim_v1 — event-based liquidity sweep failure candidate
 //!
 //! Emits Signal only. No orders, no risk sizing, no backtest execution.
 //!
@@ -18,6 +19,7 @@
 //!   Phase 7 — report writers
 
 pub mod ema_trend_pullback;
+pub mod liquidity_sweep_reclaim;
 pub mod mean_revert;
 pub mod regime;
 pub mod screened_vwap_scalp;
@@ -27,6 +29,7 @@ pub mod vwap_reclaim_short;
 pub mod vwap_reclaim_short_v2;
 
 pub use ema_trend_pullback::EmaTrendPullbackV1;
+pub use liquidity_sweep_reclaim::LiquiditySweepReclaimV1;
 pub use mean_revert::MeanRevertV1;
 pub use regime::{classify_screening_regime, MarketRegime};
 pub use screened_vwap_scalp::ScreenedVwapScalp;
