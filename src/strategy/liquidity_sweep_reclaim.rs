@@ -74,10 +74,7 @@ impl Strategy for LiquiditySweepReclaimV1 {
         let start = lookback_len.saturating_sub(80);
         let lookback = &input.entry_lookback[start..];
 
-        let swing_low = lookback
-            .iter()
-            .map(|c| c.low)
-            .fold(f64::INFINITY, f64::min);
+        let swing_low = lookback.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
         let swing_high = lookback
             .iter()
             .map(|c| c.high)
@@ -93,12 +90,24 @@ impl Strategy for LiquiditySweepReclaimV1 {
 
         let mut candidates: Vec<SweepCandidate> = Vec::new();
         if let Some(c) = long_candidate {
-            if !higher_tf_blocks_long(input, ema_21_conf, ema_50_conf, ema_50_screen, ema_200_screen) {
+            if !higher_tf_blocks_long(
+                input,
+                ema_21_conf,
+                ema_50_conf,
+                ema_50_screen,
+                ema_200_screen,
+            ) {
                 candidates.push(c);
             }
         }
         if let Some(c) = short_candidate {
-            if !higher_tf_blocks_short(input, ema_21_conf, ema_50_conf, ema_50_screen, ema_200_screen) {
+            if !higher_tf_blocks_short(
+                input,
+                ema_21_conf,
+                ema_50_conf,
+                ema_50_screen,
+                ema_200_screen,
+            ) {
                 candidates.push(c);
             }
         }
