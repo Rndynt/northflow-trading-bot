@@ -9,8 +9,11 @@ use crate::core::{NorthflowError, Side, Signal, SignalId, StrategyId};
 use crate::strategy::regime::{classify_screening_regime, MarketRegime};
 use crate::strategy::traits::{MultiTimeframeInput, Strategy, StrategyContext};
 
-const MIN_TRIGGER_BODY_RATIO: f64 = 0.25;
-const MAX_RECLAIM_DISTANCE_ATR: f64 = 0.35;
+const MIN_TRIGGER_BODY_RATIO: f64 = 0.55;
+const MIN_TRIGGER_BODY_ATR: f64 = 0.35;
+const MIN_CLOSE_LOCATION: f64 = 0.70;
+const MAX_RECLAIM_DISTANCE_ATR: f64 = 0.20;
+const MIN_TRIGGER_VOLUME_RATIO: f64 = 1.15;
 
 #[derive(Debug, Clone)]
 pub struct ScreenedVwapScalpV2 {
@@ -103,7 +106,7 @@ impl Strategy for ScreenedVwapScalpV2 {
         }
 
         let volume_ratio = candle.volume / volume_sma_20;
-        if volume_ratio < self.cfg.min_volume_ratio {
+        if volume_ratio < self.cfg.min_volume_ratio || volume_ratio < MIN_TRIGGER_VOLUME_RATIO {
             return Ok(None);
         }
 
@@ -150,8 +153,10 @@ impl Strategy for ScreenedVwapScalpV2 {
         filters_passed.push("atr_bps_in_range".to_string());
         filters_passed.push("near_vwap_or_ema21".to_string());
         filters_passed.push("volume_ratio_ok".to_string());
-        filters_passed.push("price_action_trigger_ok".to_string());
+        filters_passed.push("momentum_trigger_ok".to_string());
         filters_passed.push("trigger_body_ratio_ok".to_string());
+        filters_passed.push("trigger_body_atr_ok".to_string());
+        filters_passed.push("trigger_close_location_ok".to_string());
         filters_passed.push("expected_reward_ok".to_string());
         filters_passed.push("expected_net_edge_ok".to_string());
         filters_passed.push("direction_enabled".to_string());
@@ -159,12 +164,12 @@ impl Strategy for ScreenedVwapScalpV2 {
 
         let entry_reason = match side {
             Side::Long => format!(
-                "bullish regime, bullish entry trigger, close above VWAP/EMA21, body_ratio={:.2}, reclaim_distance_atr={:.2}, volume_ratio={:.2}, atr_bps={:.1}",
-                trigger.body_ratio, trigger.reclaim_distance_atr, volume_ratio, atr_bps
+                "bullish momentum follow-through, body_ratio={:.2}, body_atr={:.2}, close_location={:.2}, reclaim_distance_atr={:.2}, volume_ratio={:.2}, atr_bps={:.1}",
+                trigger.body_ratio, trigger.body_atr, trigger.close_location, trigger.reclaim_distance_atr, volume_ratio, atr_bps
             ),
             Side::Short => format!(
-                "bearish regime, bearish entry trigger, close below VWAP/EMA21, body_ratio={:.2}, reject_distance_atr={:.2}, volume_ratio={:.2}, atr_bps={:.1}",
-                trigger.body_ratio, trigger.reclaim_distance_atr, volume_ratio, atr_bps
+                "bearish momentum follow-through, body_ratio={:.2}, body_atr={:.2}, close_location={:.2}, reject_distance_atr={:.2}, volume_ratio={:.2}, atr_bps={:.1}",
+                trigger.body_ratio, trigger.body_atr, trigger.close_location, trigger.reclaim_distance_atr, volume_ratio, atr_bps
             ),
         };
 
@@ -199,6 +204,8 @@ impl Strategy for ScreenedVwapScalpV2 {
 struct TriggerCheck {
     passes: bool,
     body_ratio: f64,
+    body_atr: f64,
+    close_location: f64,
     reclaim_distance_atr: f64,
 }
 
@@ -238,16 +245,27 @@ fn price_action_trigger(
     atr: f64,
 ) -> TriggerCheck {
     let range = candle.high - candle.low;
-    let body_ratio = if range > 0.0 {
-        (candle.close - candle.open).abs() / range
-    } else {
-        0.0
+    let body = (candle.close - candle.open).abs();
+
+    let body_ratio = if range > 0.0 { body / range } else { 0.0 };
+    let body_atr = if atr > 0.0 { body / atr } else { 0.0 };
+
+    let close_location = match side {
+        Side::Long if range > 0.0 => (candle.close - candle.low) / range,
+        Side::Short if range > 0.0 => (candle.high - candle.close) / range,
+        _ => 0.0,
     };
 
-    if body_ratio < MIN_TRIGGER_BODY_RATIO || atr <= 0.0 {
+    if body_ratio < MIN_TRIGGER_BODY_RATIO
+        || body_atr < MIN_TRIGGER_BODY_ATR
+        || close_location < MIN_CLOSE_LOCATION
+        || atr <= 0.0
+    {
         return TriggerCheck {
             passes: false,
             body_ratio,
+            body_atr,
+            close_location,
             reclaim_distance_atr: f64::INFINITY,
         };
     }
@@ -258,9 +276,12 @@ fn price_action_trigger(
             let touched_level = candle.low <= trigger_level + MAX_RECLAIM_DISTANCE_ATR * atr;
             let reclaimed_level = candle.close > trigger_level;
             let bullish_body = candle.close > candle.open;
+
             TriggerCheck {
                 passes: bullish_body && touched_level && reclaimed_level,
                 body_ratio,
+                body_atr,
+                close_location,
                 reclaim_distance_atr: ((candle.low - trigger_level).max(0.0)) / atr,
             }
         }
@@ -269,9 +290,12 @@ fn price_action_trigger(
             let touched_level = candle.high >= trigger_level - MAX_RECLAIM_DISTANCE_ATR * atr;
             let rejected_level = candle.close < trigger_level;
             let bearish_body = candle.close < candle.open;
+
             TriggerCheck {
                 passes: bearish_body && touched_level && rejected_level,
                 body_ratio,
+                body_atr,
+                close_location,
                 reclaim_distance_atr: ((trigger_level - candle.high).max(0.0)) / atr,
             }
         }
