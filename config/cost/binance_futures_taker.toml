@@ -1,0 +1,18 @@
+# Global execution cost profile.
+# Binance USD-M Futures taker baseline.
+#
+# IMPORTANT:
+# - `taker_fee_bps` is fee PER LEG.
+# - The engine applies it on entry and exit.
+# - 0.05% taker = 5 bps per leg.
+# - Round-trip taker fee = 10 bps.
+#
+# Funding, dynamic spread, and dynamic slippage are not fixed here.
+# They must be modelled separately, not mixed into the base exchange fee.
+
+[cost]
+taker_fee_bps = 5.0
+slippage_bps = 0.0
+spread_bps = 0.0
+market_impact_bps = 0.0
+stop_slippage_bps = 0.0
