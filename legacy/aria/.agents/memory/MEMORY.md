@@ -1,1 +1,0 @@
-- [P0 Refactor decisions](p0-refactor.md) — PositionAction enum, HTF screening arch, ExecutionFailed release pattern, quant strategy alias mapping
