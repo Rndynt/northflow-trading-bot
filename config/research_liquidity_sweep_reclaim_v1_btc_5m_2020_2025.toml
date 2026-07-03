@@ -45,4 +45,3 @@ max_bars_held = 30
 entry_geometry_mode = "reanchor_to_actual_entry"
 entry_lookback_bars = 120
 strategy_run_mode = "single"
-strategies = ["liquidity_sweep_reclaim_v1"]
