@@ -37,22 +37,12 @@ use crate::indicators::{IndicatorEngine, IndicatorSnapshot};
 use crate::market::{CandleStore, OhlcvLoader};
 use crate::risk::{CostModelConfig, RiskContext, RiskEngine};
 use crate::strategy::{
-    EmaTrendPullbackV1, LiquiditySweepReclaimV1, MeanRevertV1, MultiTimeframeInput,
-    ScreenedVwapScalp, ScreenedVwapScalpV2, Strategy, StrategyContext, VwapReclaimShortV1,
-    VwapReclaimShortV2,
+    registry::build_strategy_runtime, MultiTimeframeInput, Strategy, StrategyContext,
 };
 
-// ── ActiveStrategy ────────────────────────────────────────────────────────────
+// ── Strategy runtime helper ──────────────────────────────────────────────────
 
-enum ActiveStrategy {
-    V1(ScreenedVwapScalp),
-    V2(ScreenedVwapScalpV2),
-    Etp(EmaTrendPullbackV1),
-    Vrs(VwapReclaimShortV1),
-    Vrs2(VwapReclaimShortV2),
-    Mr(MeanRevertV1),
-    Lsr(LiquiditySweepReclaimV1),
-}
+struct ActiveStrategy(Box<dyn Strategy>);
 
 impl ActiveStrategy {
     fn evaluate(
@@ -60,15 +50,7 @@ impl ActiveStrategy {
         ctx: &StrategyContext,
         input: &MultiTimeframeInput,
     ) -> Result<Option<crate::core::Signal>, crate::core::NorthflowError> {
-        match self {
-            Self::V1(s) => s.evaluate(ctx, input),
-            Self::V2(s) => s.evaluate(ctx, input),
-            Self::Etp(s) => s.evaluate(ctx, input),
-            Self::Vrs(s) => s.evaluate(ctx, input),
-            Self::Vrs2(s) => s.evaluate(ctx, input),
-            Self::Mr(s) => s.evaluate(ctx, input),
-            Self::Lsr(s) => s.evaluate(ctx, input),
-        }
+        self.0.evaluate(ctx, input)
     }
 }
 
@@ -212,29 +194,11 @@ impl BacktestEngine {
         let mut risk_rejections: Vec<RiskRejection> = Vec::new();
         let mut signal_flow = SignalFlowSummary::default();
 
-        // Build strategy from config.
-        let strategy = match cfg.strategy_id.as_str() {
-            "screened_vwap_scalp" => ActiveStrategy::V1(ScreenedVwapScalp::default()),
-            "screened_vwap_scalp_v2" => {
-                ActiveStrategy::V2(ScreenedVwapScalpV2::new(cfg.v2_config()))
-            }
-            "ema_trend_pullback_v1" => {
-                ActiveStrategy::Etp(EmaTrendPullbackV1::new(cfg.etp_config()))
-            }
-            "vwap_reclaim_short_v1" => {
-                ActiveStrategy::Vrs(VwapReclaimShortV1::new(cfg.vrs_config()))
-            }
-            "vwap_reclaim_short_v2" => {
-                ActiveStrategy::Vrs2(VwapReclaimShortV2::new(cfg.vrs2_config()))
-            }
-            "mean_revert_v1" => ActiveStrategy::Mr(MeanRevertV1::new(cfg.v2_config())),
-            "liquidity_sweep_reclaim_v1" => ActiveStrategy::Lsr(LiquiditySweepReclaimV1::default()),
-            other => {
-                return Err(NorthflowError::ConfigError(format!(
-                    "unknown strategy_id: '{other}'"
-                )));
-            }
-        };
+        // Build the strategy through a trait object. Concrete strategy selection is
+        // intentionally isolated to this temporary adapter while the research
+        // registry owns production selection.
+        let strategy_runtime = build_strategy_runtime(&cfg.strategy_id)?;
+        let strategy = ActiveStrategy(strategy_runtime.strategy);
         let cooldown_bars = cfg.cooldown_bars_for_strategy(&cfg.strategy_id) as usize;
         let mut last_signal_bar: Option<usize> = None;
         let mut eng_entry = IndicatorEngine::new_default()?;
@@ -305,7 +269,7 @@ impl BacktestEngine {
                             equity,
                             peak_equity,
                             daily_realized_pnl,
-                            open_positions: 0,
+                            open_positions: usize::from(open_position.is_some()),
                         };
                         match RiskEngine::assess(&risk_cfg, &cost_cfg, &risk_ctx, &adjusted) {
                             Err(NorthflowError::InvalidSignal(_)) => {
@@ -479,7 +443,7 @@ impl BacktestEngine {
                                 equity,
                                 peak_equity,
                                 daily_realized_pnl,
-                                open_positions: 0,
+                                open_positions: usize::from(open_position.is_some()),
                             };
 
                             match RiskEngine::assess(&risk_cfg, &cost_cfg, &risk_ctx, &signal) {
@@ -606,14 +570,17 @@ fn build_trade(
     };
 
     let fee = pos.entry_fee + exit.fee;
-    let slippage =
-        pos.entry_slippage + exit.slippage + spread_cost + market_impact_cost + stop_slippage_cost;
+    // Accounting model A: fill prices already include adverse entry/exit slippage.
+    // `Trade.slippage` is diagnostic embedded-price slippage only; net PnL must
+    // not subtract it again. Explicit costs below remain nominal deductions.
+    let slippage = pos.entry_slippage + exit.slippage;
+    let explicit_cost = spread_cost + market_impact_cost + stop_slippage_cost;
 
     let gross_pnl = match pos.signal.side {
         Side::Long => (exit.price - pos.entry_price) * pos.qty,
         Side::Short => (pos.entry_price - exit.price) * pos.qty,
     };
-    let net_pnl = gross_pnl - fee - slippage;
+    let net_pnl = gross_pnl - fee - explicit_cost;
 
     let actual_edge_bps = if entry_notional > 0.0 {
         net_pnl / entry_notional * 10_000.0

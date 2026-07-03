@@ -4,7 +4,7 @@
 //! paper     — DISABLED until research engine validated for paper.
 //! live      — DISABLED until paper/live parity proven.
 
-use northflow_crypto_trading_bot::{config::ResearchConfig, research::run_research};
+use northflow_trading_bot::{config::ResearchConfig, research::run_research};
 use std::{env, process};
 
 fn main() {

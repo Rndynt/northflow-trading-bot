@@ -445,11 +445,15 @@ impl ResearchConfig {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, String> {
         let raw = fs::read_to_string(path.as_ref())
             .map_err(|e| format!("failed to read config {}: {e}", path.as_ref().display()))?;
-        Ok(Self::parse(&raw))
+        let cfg = Self::try_parse(&raw)?;
+        cfg.validate_runtime_config().map_err(|e| format!("{e}"))?;
+        Ok(cfg)
     }
 
-    pub fn parse(raw: &str) -> Self {
+    pub fn try_parse(raw: &str) -> Result<Self, String> {
         let mut cfg = Self::default();
+        let value: toml::Value = toml::from_str(raw).map_err(|e| format!("malformed TOML: {e}"))?;
+        apply_toml_value(&mut cfg, &value);
         cfg.historical_files = parse_historical_files(raw);
         for line in raw.lines() {
             let line = line.trim();
@@ -715,7 +719,52 @@ impl ResearchConfig {
                 _ => {}
             }
         }
-        cfg
+        Ok(cfg)
+    }
+
+    pub fn parse(raw: &str) -> Self {
+        Self::try_parse(raw).unwrap_or_default()
+    }
+
+    pub fn validate_runtime_config(&self) -> Result<(), NorthflowError> {
+        if self.max_open_positions != 1 {
+            return Err(NorthflowError::ConfigError(
+                "multi-position backtest is not implemented; set max_open_positions = 1"
+                    .to_string(),
+            ));
+        }
+        self.validate_timeframes()?;
+        for (name, value) in [
+            ("taker_fee_bps", self.taker_fee_bps),
+            ("slippage_bps", self.slippage_bps),
+            ("spread_bps", self.spread_bps),
+            ("market_impact_bps", self.market_impact_bps),
+            ("stop_slippage_bps", self.stop_slippage_bps),
+        ] {
+            if !value.is_finite() || value < 0.0 {
+                return Err(NorthflowError::ConfigError(format!(
+                    "{name} must be finite and non-negative"
+                )));
+            }
+        }
+        for (name, value) in [
+            ("initial_equity_usd", self.initial_equity),
+            ("risk_per_trade_pct", self.risk_per_trade_pct),
+            ("max_leverage", self.max_leverage),
+            ("min_reward_risk", self.min_reward_risk),
+        ] {
+            if !value.is_finite() || value <= 0.0 {
+                return Err(NorthflowError::ConfigError(format!(
+                    "{name} must be finite and positive"
+                )));
+            }
+        }
+        if self.reports_dir.trim().is_empty() {
+            return Err(NorthflowError::ConfigError(
+                "reports_dir must not be empty".to_string(),
+            ));
+        }
+        Ok(())
     }
 
     /// Resolve historical data paths for a symbol.
@@ -1946,5 +1995,175 @@ BTCUSDT = [
             cfg.historical_paths_for("ETHUSDT"),
             vec![std::path::PathBuf::from("data/historical/ETHUSDT.csv")]
         );
+    }
+}
+
+fn apply_toml_value(cfg: &mut ResearchConfig, value: &toml::Value) {
+    let get = |section: &str, key: &str| value.get(section).and_then(|s| s.get(key));
+    if let Some(v) = get("pairs", "symbols").and_then(|v| v.as_array()) {
+        cfg.symbols = v
+            .iter()
+            .filter_map(|x| x.as_str().map(str::to_string))
+            .collect();
+    }
+    for (sec, key, set) in [
+        ("pairs", "entry_timeframe", 0usize),
+        ("pairs", "confirmation_timeframe", 1),
+        ("pairs", "screening_timeframe", 2),
+    ] {
+        if let Some(v) = get(sec, key).and_then(|v| v.as_str()) {
+            match set {
+                0 => cfg.entry_timeframe = v.to_string(),
+                1 => cfg.confirmation_timeframe = v.to_string(),
+                _ => cfg.screening_timeframe = v.to_string(),
+            }
+        }
+    }
+    if let Some(v) = get("data", "data_dir").and_then(|v| v.as_str()) {
+        cfg.data_dir = v.to_string();
+    }
+    if let Some(v) = get("reports", "reports_dir").and_then(|v| v.as_str()) {
+        cfg.reports_dir = v.to_string();
+    }
+    if let Some(tbl) = value.get("historical_files").and_then(|v| v.as_table()) {
+        cfg.historical_files = tbl
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    v.as_array()
+                        .unwrap_or(&Vec::new())
+                        .iter()
+                        .filter_map(|x| x.as_str().map(PathBuf::from))
+                        .collect(),
+                )
+            })
+            .collect();
+    }
+    if let Some(v) = get("strategy", "strategy_id").and_then(|v| v.as_str()) {
+        cfg.strategy_id = v.to_string();
+    }
+    if let Some(v) = get("strategy", "strategy_run_mode").and_then(|v| v.as_str()) {
+        cfg.strategy_run_mode = v.to_string();
+    }
+    if let Some(v) = get("strategy", "strategies").and_then(|v| v.as_array()) {
+        cfg.strategies = v
+            .iter()
+            .filter_map(|x| x.as_str().map(str::to_string))
+            .collect();
+    }
+    macro_rules! f {
+        ($sec:literal,$key:literal,$field:ident) => {
+            if let Some(v) = get($sec, $key)
+                .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
+            {
+                cfg.$field = v;
+            }
+        };
+    }
+    macro_rules! u {
+        ($sec:literal,$key:literal,$field:ident,$ty:ty) => {
+            if let Some(v) = get($sec, $key).and_then(|v| v.as_integer()) {
+                cfg.$field = v as $ty;
+            }
+        };
+    }
+    macro_rules! b {
+        ($sec:literal,$key:literal,$field:ident) => {
+            if let Some(v) = get($sec, $key).and_then(|v| v.as_bool()) {
+                cfg.$field = v;
+            }
+        };
+    }
+    f!("risk", "initial_equity_usd", initial_equity);
+    f!("risk", "risk_per_trade_pct", risk_per_trade_pct);
+    u!("risk", "max_open_positions", max_open_positions, usize);
+    f!("risk", "max_leverage", max_leverage);
+    f!("risk", "min_reward_risk", min_reward_risk);
+    f!("risk", "max_daily_loss_pct", max_daily_loss_pct);
+    f!("risk", "max_drawdown_pct", max_drawdown_pct);
+    f!("cost", "taker_fee_bps", taker_fee_bps);
+    f!("cost", "slippage_bps", slippage_bps);
+    f!("cost", "spread_bps", spread_bps);
+    f!("cost", "market_impact_bps", market_impact_bps);
+    f!("cost", "stop_slippage_bps", stop_slippage_bps);
+    b!("backtest", "conservative_intrabar", conservative_intrabar);
+    u!("backtest", "max_bars_held", max_bars_held, u32);
+    if let Some(v) = get("backtest", "entry_geometry_mode").and_then(|v| v.as_str()) {
+        cfg.entry_geometry_mode = v.to_string();
+    }
+    u!(
+        "backtest",
+        "entry_lookback_bars",
+        entry_lookback_bars,
+        usize
+    );
+    if let Some(s) = value
+        .get("strategy")
+        .and_then(|v| v.get("screened_vwap_scalp_v2"))
+    {
+        if let Some(v) = s.get("cooldown_bars").and_then(|v| v.as_integer()) {
+            cfg.v2_cooldown_bars = v as u64;
+        }
+    }
+}
+
+#[cfg(test)]
+mod preset_parse_tests {
+    use super::*;
+    #[test]
+    fn malformed_toml_returns_error() {
+        assert!(ResearchConfig::try_parse("[bad").is_err());
+    }
+    #[test]
+    fn valid_preset_parses_successfully() {
+        let raw = r#"[mode]
+run_mode="research"
+dry_run=true
+[pairs]
+symbols=["BTCUSDT"]
+entry_timeframe="1m"
+confirmation_timeframe="5m"
+screening_timeframe="15m"
+[strategy]
+strategy_id="screened_vwap_scalp"
+strategy_run_mode="single"
+[risk]
+initial_equity_usd=5000.0
+risk_per_trade_pct=0.15
+max_open_positions=1
+max_leverage=3.0
+min_reward_risk=1.3
+max_daily_loss_pct=3.0
+max_drawdown_pct=100.0
+[cost]
+taker_fee_bps=4.0
+slippage_bps=2.0
+spread_bps=1.0
+market_impact_bps=1.0
+stop_slippage_bps=5.0
+[backtest]
+conservative_intrabar=true
+max_bars_held=18
+entry_geometry_mode="reanchor_to_actual_entry"
+[reports]
+reports_dir="reports/test"
+"#;
+        let cfg = ResearchConfig::try_parse(raw).unwrap();
+        assert_eq!(cfg.symbols, vec!["BTCUSDT"]);
+        cfg.validate_runtime_config().unwrap();
+    }
+    #[test]
+    fn invalid_timeframe_ordering_returns_error() {
+        let mut cfg = ResearchConfig::default();
+        cfg.entry_timeframe = "15m".into();
+        assert!(cfg.validate_runtime_config().is_err());
+    }
+    #[test]
+    fn max_open_positions_above_one_returns_error() {
+        let mut cfg = ResearchConfig::default();
+        cfg.max_open_positions = 2;
+        let err = cfg.validate_runtime_config().unwrap_err().to_string();
+        assert!(err.contains("multi-position"));
     }
 }

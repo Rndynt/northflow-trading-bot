@@ -1,12 +1,12 @@
 [package]
-name = "northflow-crypto-trading-bot"
+name = "northflow-trading-bot"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
 default-run = "northflow"
 description = "Northflow — deterministic crypto trading research and execution core"
 license = "MIT"
-repository = "https://github.com/Rndynt/northflow-crypto-trading-bot"
+repository = "https://github.com/Rndynt/northflow-trading-bot"
 readme = "README.md"
 
 [[bin]]
@@ -14,7 +14,7 @@ name = "northflow"
 path = "src/main.rs"
 
 [lib]
-name = "northflow_crypto_trading_bot"
+name = "northflow_trading_bot"
 path = "src/lib.rs"
 
 [profile.release]
@@ -23,3 +23,7 @@ lto = "thin"
 codegen-units = 4
 panic = "abort"
 strip = "symbols"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
