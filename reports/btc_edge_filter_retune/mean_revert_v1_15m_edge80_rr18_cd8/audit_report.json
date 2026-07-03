@@ -1,0 +1,19 @@
+{
+  "passed": true,
+  "total_trades": 11,
+  "error_count": 0,
+  "warning_count": 0,
+  "issues":   [
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000001","signal_id":"SIG-BT-00000001"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000003","signal_id":"SIG-BT-00000003"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000004","signal_id":"SIG-BT-00000004"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000006","signal_id":"SIG-BT-00000006"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000008","signal_id":"SIG-BT-00000008"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000011","signal_id":"SIG-BT-00000011"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000012","signal_id":"SIG-BT-00000012"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000013","signal_id":"SIG-BT-00000013"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000014","signal_id":"SIG-BT-00000014"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000015","signal_id":"SIG-BT-00000015"},
+    {"severity":"info","code":"empty_filters_failed","message":"filters_failed is empty (all filters passed)","trade_id":"TRD-SIG-BT-00000016","signal_id":"SIG-BT-00000016"}
+  ]
+}

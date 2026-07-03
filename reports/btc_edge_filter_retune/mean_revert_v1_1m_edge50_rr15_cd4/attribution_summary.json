@@ -1,0 +1,13 @@
+{
+  "total_trades": 12,
+  "total_signals_with_trades": 12,
+  "unique_signal_ids": 12,
+  "unique_trade_ids": 12,
+  "avg_expected_edge_bps": 82.732918,
+  "avg_actual_edge_bps": -5.314514,
+  "edge_realization_bps": -88.047432,
+  "positive_expected_edge_trades": 12,
+  "positive_actual_edge_trades": 4,
+  "filters_passed_count": 60,
+  "filters_failed_count": 0
+}

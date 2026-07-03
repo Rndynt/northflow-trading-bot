@@ -1,0 +1,24 @@
+{
+  "phase": "phase_7_reports_and_attribution",
+  "generated_by": "northflow_research",
+  "files":   [
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/attribution_by_exit_reason.csv","kind":"attribution_by_exit_reason","rows":2},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/attribution_by_filter.csv","kind":"attribution_by_filter","rows":15},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/attribution_by_regime.csv","kind":"attribution_by_regime","rows":2},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/attribution_by_side.csv","kind":"attribution_by_side","rows":2},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/attribution_by_strategy.csv","kind":"attribution_by_strategy","rows":1},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/attribution_summary.json","kind":"attribution_summary","rows":1},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/audit_report.json","kind":"audit","rows":1},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/backtest_summary.json","kind":"summary","rows":1},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/cost_edge_distribution.csv","kind":"cost_edge_distribution","rows":8},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/equity_curve.csv","kind":"equity_curve","rows":351},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/monthly_summary.csv","kind":"monthly_summary","rows":53},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/rejection_by_stage_reason.csv","kind":"rejection_by_stage_reason","rows":0},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/report_manifest.json","kind":"manifest","rows":1},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/risk_rejections.csv","kind":"risk_rejections","rows":0},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/signal_diagnostics.csv","kind":"signal_diagnostics","rows":350},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/signal_flow_summary.json","kind":"signal_flow_summary","rows":1},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/trade_distribution_summary.json","kind":"trade_distribution_summary","rows":1},
+    {"path":"screened_vwap_scalp_v2_15m_edge50_rr15_cd4/trades.csv","kind":"trades","rows":350}
+  ]
+}

@@ -1,0 +1,3 @@
+month,trades,wins,losses,win_rate,gross_pnl,fee,slippage,total_cost,net_pnl,profit_factor,avg_win,avg_loss,expectancy,max_consecutive_losses,avg_reward_risk,avg_expected_edge_bps,avg_actual_edge_bps,avg_edge_realization_bps,avg_total_cost_bps,take_profit_count,stop_loss_count,time_exit_count,end_of_backtest_count
+2022-05,7,3,4,42.857143,33.461706,19.656249,0.000000,19.656249,13.805456,2.113776,18.435150,-10.374999,1.972208,3,2.813929,71.502690,7.962946,-63.539744,10.011216,3,4,0,0
+2023-03,5,1,4,20.000000,-12.067959,12.291270,0.000000,12.291270,-24.359229,0.598326,15.724460,-10.020922,-4.871846,2,2.947225,98.455236,-23.902959,-122.358194,10.000843,1,4,0,0
