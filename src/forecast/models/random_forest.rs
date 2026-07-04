@@ -17,6 +17,8 @@ pub fn evaluate(
     trees: usize,
     max_depth: usize,
     min_leaf: usize,
+    feature_subsample_ratio: f64,
+    target: fn(&ForecastRow) -> f64,
 ) -> Vec<Prediction> {
     if train.is_empty() || test.is_empty() || trees == 0 {
         return vec![];
@@ -35,6 +37,8 @@ pub fn evaluate(
                 min_leaf.max(1),
                 tree_id,
                 n_features,
+                feature_subsample_ratio,
+                target,
             )
         })
         .collect::<Vec<_>>();
@@ -50,6 +54,7 @@ pub fn evaluate(
                 timestamp: row.timestamp,
                 actual_bps: row.future_return_bps,
                 actual_after_cost_bps: row.future_return_after_cost_bps,
+                effective_actual_bps: target(row),
                 predicted_bps,
             }
         })
@@ -63,13 +68,18 @@ fn build_tree(
     min_leaf: usize,
     tree_id: usize,
     n_features: usize,
+    feature_subsample_ratio: f64,
+    target: fn(&ForecastRow) -> f64,
 ) -> Node {
-    let mean = mean_y(rows, idxs);
-    if depth_left == 0 || idxs.len() <= min_leaf * 2 || variance_y(rows, idxs, mean) <= 1e-12 {
+    let mean = mean_y(rows, idxs, target);
+    if depth_left == 0
+        || idxs.len() <= min_leaf * 2
+        || variance_y(rows, idxs, mean, target) <= 1e-12
+    {
         return Node::Leaf(mean);
     }
 
-    let feature_count = ((n_features as f64).sqrt().ceil() as usize)
+    let feature_count = ((n_features as f64 * feature_subsample_ratio).ceil() as usize)
         .max(1)
         .min(n_features);
     let mut best: Option<(usize, f64, f64)> = None;
@@ -84,9 +94,9 @@ fn build_tree(
         if left.len() < min_leaf || right.len() < min_leaf {
             continue;
         }
-        let lm = mean_y(rows, &left);
-        let rm = mean_y(rows, &right);
-        let loss = squared_error(rows, &left, lm) + squared_error(rows, &right, rm);
+        let lm = mean_y(rows, &left, target);
+        let rm = mean_y(rows, &right, target);
+        let loss = squared_error(rows, &left, lm, target) + squared_error(rows, &right, rm, target);
         if best.map(|(_, _, b_loss)| loss < b_loss).unwrap_or(true) {
             best = Some((feature, threshold, loss));
         }
@@ -109,6 +119,8 @@ fn build_tree(
             min_leaf,
             tree_id + 11,
             n_features,
+            feature_subsample_ratio,
+            target,
         )),
         right: Box::new(build_tree(
             rows,
@@ -117,6 +129,8 @@ fn build_tree(
             min_leaf,
             tree_id + 17,
             n_features,
+            feature_subsample_ratio,
+            target,
         )),
     }
 }
@@ -147,18 +161,25 @@ fn predict(node: &Node, features: &[f64]) -> f64 {
         }
     }
 }
-fn mean_y(rows: &[ForecastRow], idxs: &[usize]) -> f64 {
-    idxs.iter()
-        .map(|&i| rows[i].future_return_after_cost_bps)
-        .sum::<f64>()
-        / idxs.len() as f64
+fn mean_y(rows: &[ForecastRow], idxs: &[usize], target: fn(&ForecastRow) -> f64) -> f64 {
+    idxs.iter().map(|&i| target(&rows[i])).sum::<f64>() / idxs.len() as f64
 }
-fn variance_y(rows: &[ForecastRow], idxs: &[usize], mean: f64) -> f64 {
-    squared_error(rows, idxs, mean) / idxs.len() as f64
+fn variance_y(
+    rows: &[ForecastRow],
+    idxs: &[usize],
+    mean: f64,
+    target: fn(&ForecastRow) -> f64,
+) -> f64 {
+    squared_error(rows, idxs, mean, target) / idxs.len() as f64
 }
-fn squared_error(rows: &[ForecastRow], idxs: &[usize], mean: f64) -> f64 {
+fn squared_error(
+    rows: &[ForecastRow],
+    idxs: &[usize],
+    mean: f64,
+    target: fn(&ForecastRow) -> f64,
+) -> f64 {
     idxs.iter()
-        .map(|&i| (rows[i].future_return_after_cost_bps - mean).powi(2))
+        .map(|&i| (target(&rows[i]) - mean).powi(2))
         .sum()
 }
 
@@ -183,8 +204,12 @@ mod tests {
             row(11.0, 11.0),
         ];
         let test = [row(9.0, 9.0)];
-        let a = evaluate(&train, &test, 5, 3, 1);
-        let b = evaluate(&train, &test, 5, 3, 1);
+        let a = evaluate(&train, &test, 5, 3, 1, 0.5, |r| {
+            r.future_return_after_cost_bps
+        });
+        let b = evaluate(&train, &test, 5, 3, 1, 0.5, |r| {
+            r.future_return_after_cost_bps
+        });
         assert_eq!(a[0].predicted_bps, b[0].predicted_bps);
     }
 }

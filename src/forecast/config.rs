@@ -57,11 +57,7 @@ const KNOWN_FEATURES: &[&str] = &[
     "hour_of_day",
     "day_of_week",
 ];
-const KNOWN_LABELS: &[&str] = &[
-    "future_return_bps",
-    "future_return_after_cost_bps",
-    "future_direction_after_cost",
-];
+const KNOWN_LABELS: &[&str] = &["future_return_bps", "future_return_after_cost_bps"];
 const KNOWN_MODELS: &[&str] = &["ridge", "random_forest"];
 
 impl Default for ForecastConfig {
@@ -256,8 +252,18 @@ impl ForecastConfig {
                 return Err(format!("unknown forecast feature: {f}"));
             }
         }
+        if self.label_target == "future_direction_after_cost" {
+            return Err("future_direction_after_cost requires a classification evaluator and is not supported yet".into());
+        }
         if !KNOWN_LABELS.contains(&self.label_target.as_str()) {
             return Err(format!("unknown label target: {}", self.label_target));
+        }
+        if !(self.random_forest.feature_subsample_ratio > 0.0
+            && self.random_forest.feature_subsample_ratio <= 1.0)
+        {
+            return Err(
+                "models.random_forest.feature_subsample_ratio must be > 0.0 and <= 1.0".into(),
+            );
         }
         for m in &self.enabled_models {
             if !KNOWN_MODELS.contains(&m.as_str()) {
@@ -327,6 +333,33 @@ mod tests {
         assert!(c.validate().is_ok());
     }
     #[test]
+    fn invalid_rf_ratio_rejected() {
+        let mut c = ForecastConfig::default();
+        c.random_forest.feature_subsample_ratio = 0.0;
+        assert!(c
+            .validate()
+            .unwrap_err()
+            .contains("feature_subsample_ratio"));
+    }
+    #[test]
+    fn classification_target_rejected() {
+        let mut c = ForecastConfig::default();
+        c.label_target = "future_direction_after_cost".into();
+        assert!(c
+            .validate()
+            .unwrap_err()
+            .contains("classification evaluator"));
+    }
+    #[test]
+    fn effective_target_uses_cost_flag() {
+        let mut c = ForecastConfig::default();
+        c.label_target = "future_return_bps".into();
+        c.cost_adjusted = true;
+        assert_eq!(c.effective_target_name(), "future_return_after_cost_bps");
+        c.cost_adjusted = false;
+        assert_eq!(c.effective_target_name(), "future_return_bps");
+    }
+    #[test]
     fn invalid_feature_rejected() {
         let mut c = ForecastConfig::default();
         c.enabled_features = vec!["future_leak".into()];
@@ -334,5 +367,15 @@ mod tests {
             .validate()
             .unwrap_err()
             .contains("unknown forecast feature"));
+    }
+}
+
+impl ForecastConfig {
+    pub fn effective_target_name(&self) -> &'static str {
+        if self.cost_adjusted || self.label_target == "future_return_after_cost_bps" {
+            "future_return_after_cost_bps"
+        } else {
+            "future_return_bps"
+        }
     }
 }
