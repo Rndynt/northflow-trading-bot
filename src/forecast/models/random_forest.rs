@@ -11,6 +11,16 @@ enum Node {
     },
 }
 
+/// Result of evaluating a Random Forest on one walk-forward window: the
+/// out-of-sample predictions plus the accumulated split counts per feature
+/// (summed across every tree in the forest), used for real feature-importance
+/// reporting instead of a zero placeholder.
+#[derive(Debug, Clone, Default)]
+pub struct RandomForestEvaluation {
+    pub predictions: Vec<Prediction>,
+    pub split_counts: Vec<usize>,
+}
+
 pub fn evaluate(
     train: &[ForecastRow],
     test: &[ForecastRow],
@@ -19,14 +29,15 @@ pub fn evaluate(
     min_leaf: usize,
     feature_subsample_ratio: f64,
     target: fn(&ForecastRow) -> f64,
-) -> Vec<Prediction> {
+) -> RandomForestEvaluation {
     if train.is_empty() || test.is_empty() || trees == 0 {
-        return vec![];
+        return RandomForestEvaluation::default();
     }
     let n_features = train[0].features.len();
     if n_features == 0 {
-        return vec![];
+        return RandomForestEvaluation::default();
     }
+    let mut split_counts = vec![0usize; n_features];
     let forest = (0..trees)
         .map(|tree_id| {
             let sample = deterministic_bootstrap(train.len(), tree_id);
@@ -39,11 +50,13 @@ pub fn evaluate(
                 n_features,
                 feature_subsample_ratio,
                 target,
+                &mut split_counts,
             )
         })
         .collect::<Vec<_>>();
 
-    test.iter()
+    let predictions = test
+        .iter()
         .map(|row| {
             let predicted_bps = forest
                 .iter()
@@ -58,7 +71,11 @@ pub fn evaluate(
                 predicted_bps,
             }
         })
-        .collect()
+        .collect();
+    RandomForestEvaluation {
+        predictions,
+        split_counts,
+    }
 }
 
 fn build_tree(
@@ -70,6 +87,7 @@ fn build_tree(
     n_features: usize,
     feature_subsample_ratio: f64,
     target: fn(&ForecastRow) -> f64,
+    split_counts: &mut Vec<usize>,
 ) -> Node {
     let mean = mean_y(rows, idxs, target);
     if depth_left == 0
@@ -105,6 +123,7 @@ fn build_tree(
     let Some((feature, threshold, _)) = best else {
         return Node::Leaf(mean);
     };
+    split_counts[feature] += 1;
     let (left, right): (Vec<_>, Vec<_>) = idxs
         .iter()
         .copied()
@@ -121,6 +140,7 @@ fn build_tree(
             n_features,
             feature_subsample_ratio,
             target,
+            split_counts,
         )),
         right: Box::new(build_tree(
             rows,
@@ -131,6 +151,7 @@ fn build_tree(
             n_features,
             feature_subsample_ratio,
             target,
+            split_counts,
         )),
     }
 }
@@ -210,6 +231,47 @@ mod tests {
         let b = evaluate(&train, &test, 5, 3, 1, 0.5, |r| {
             r.future_return_after_cost_bps
         });
-        assert_eq!(a[0].predicted_bps, b[0].predicted_bps);
+        assert_eq!(
+            a.predictions[0].predicted_bps,
+            b.predictions[0].predicted_bps
+        );
+    }
+
+    fn multi_feature_row(x0: f64, x1: f64, y: f64) -> ForecastRow {
+        ForecastRow {
+            timestamp: 0,
+            close: 1.0,
+            features: vec![x0, x1],
+            future_return_bps: y,
+            future_return_after_cost_bps: y,
+        }
+    }
+
+    #[test]
+    fn random_forest_collects_positive_split_counts_when_splits_occur() {
+        let train: Vec<ForecastRow> = (0..40)
+            .map(|i| {
+                let x = i as f64;
+                multi_feature_row(x, -x, x * 2.0)
+            })
+            .collect();
+        let test = [multi_feature_row(5.0, -5.0, 10.0)];
+        let result = evaluate(&train, &test, 10, 4, 2, 1.0, |r| {
+            r.future_return_after_cost_bps
+        });
+        assert_eq!(result.split_counts.len(), 2);
+        let total: usize = result.split_counts.iter().sum();
+        assert!(total > 0, "expected at least one split to occur");
+    }
+
+    #[test]
+    fn random_forest_reports_zero_split_counts_when_no_split_possible() {
+        // min_leaf larger than half the training set forces every tree to stay a single leaf.
+        let train = [row(1.0, 1.0), row(2.0, 2.0), row(3.0, 3.0), row(4.0, 4.0)];
+        let test = [row(2.5, 2.5)];
+        let result = evaluate(&train, &test, 5, 3, 10, 1.0, |r| {
+            r.future_return_after_cost_bps
+        });
+        assert_eq!(result.split_counts, vec![0]);
     }
 }
