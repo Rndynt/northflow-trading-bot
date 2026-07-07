@@ -72,3 +72,7 @@ No new dependency was added. The implementations are deterministic Rust code and
 ## Boundary confirmation
 
 Existing strategy, backtest, risk sizing, fill simulation, and accounting behavior were not intentionally changed by this patch.
+
+## Result analysis
+
+The generated reports from the full BTCUSDT run above are analyzed in detail, with an explicit research decision, in [`docs/forecast-ml-result-analysis.md`](./forecast-ml-result-analysis.md).
