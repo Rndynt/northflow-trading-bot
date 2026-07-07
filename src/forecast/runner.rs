@@ -79,7 +79,9 @@ pub fn run_forecast(cfg: &ForecastConfig) -> Result<(), String> {
         println!("Embargo bars     : {}", cfg.walk_forward.embargo_bars);
         flush_stdout();
         if windows.is_empty() {
-            println!("No walk-forward windows were produced; skipping model evaluation for {symbol}.");
+            println!(
+                "No walk-forward windows were produced; skipping model evaluation for {symbol}."
+            );
             flush_stdout();
             continue;
         }

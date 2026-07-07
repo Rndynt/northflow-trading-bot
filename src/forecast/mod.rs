@@ -7,6 +7,7 @@ pub mod features;
 pub mod labels;
 pub mod metrics;
 pub mod models;
+pub mod regime_attribution;
 pub mod reports;
 pub mod runner;
 pub mod split;
