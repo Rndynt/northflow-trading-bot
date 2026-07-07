@@ -5,9 +5,14 @@ use super::{
     metrics, models, reports, split,
 };
 use crate::market::OhlcvLoader;
-use std::path::PathBuf;
+use std::{
+    io::{self, Write},
+    path::PathBuf,
+    time::Instant,
+};
 
 pub fn run_forecast(cfg: &ForecastConfig) -> Result<(), String> {
+    let run_started = Instant::now();
     print_plan(cfg);
     reports::ensure_dir(&cfg.reports_dir)?;
     let target = target_selector(cfg);
@@ -15,13 +20,47 @@ pub fn run_forecast(cfg: &ForecastConfig) -> Result<(), String> {
     let mut eval_results: Vec<ModelEvaluationResult> = Vec::new();
 
     for symbol in &cfg.symbols {
+        println!();
+        println!("Dataset");
+        println!("-------");
+        println!("Symbol           : {symbol}");
+        flush_stdout();
+
         let paths = cfg.historical_paths_for(symbol);
+        println!("Historical files : {}", paths.len());
+        for (i, path) in paths.iter().enumerate() {
+            println!("  {}. {}", i + 1, path.display());
+        }
+        flush_stdout();
+
         let missing: Vec<&PathBuf> = paths.iter().filter(|p| !p.exists()).collect();
         if !missing.is_empty() {
             return Err(format_missing_data(symbol, &missing));
         }
+
+        let load_started = Instant::now();
+        println!("Loading candles  : started");
+        flush_stdout();
         let loaded = OhlcvLoader::load_files(&paths).map_err(|e| format!("{e}"))?;
+        println!(
+            "Loading candles  : done | rows={} | elapsed={:.1}s",
+            loaded.candles.len(),
+            load_started.elapsed().as_secs_f64()
+        );
+        flush_stdout();
+
+        let dataset_started = Instant::now();
+        println!("Building dataset : started");
+        flush_stdout();
         let ds = dataset::build_dataset(symbol, &loaded.candles, cfg);
+        println!(
+            "Building dataset : done | output_rows={} | skipped_missing_feature={} | skipped_label_horizon={} | elapsed={:.1}s",
+            ds.rows.len(),
+            ds.summary.skipped_missing_feature,
+            ds.summary.skipped_label_horizon,
+            dataset_started.elapsed().as_secs_f64()
+        );
+        flush_stdout();
         reports::write_dataset_reports(&cfg.reports_dir, &ds)?;
         reports_written.push("dataset_summary.json".to_string());
         reports_written.push("feature_summary.csv".to_string());
@@ -30,15 +69,47 @@ pub fn run_forecast(cfg: &ForecastConfig) -> Result<(), String> {
         let windows = split::build_windows(&ds.rows, &cfg.walk_forward);
         reports::write_windows(&cfg.reports_dir, &windows)?;
         reports_written.push("walk_forward_windows.csv".to_string());
+        println!();
+        println!("Walk Forward");
+        println!("------------");
+        println!("Windows          : {}", windows.len());
+        println!("Train months     : {}", cfg.walk_forward.train_months);
+        println!("Test months      : {}", cfg.walk_forward.test_months);
+        println!("Step months      : {}", cfg.walk_forward.step_months);
+        println!("Embargo bars     : {}", cfg.walk_forward.embargo_bars);
+        flush_stdout();
         if windows.is_empty() {
+            println!("No walk-forward windows were produced; skipping model evaluation for {symbol}.");
+            flush_stdout();
             continue;
         }
+
         for model in &cfg.enabled_models {
+            let model_started = Instant::now();
+            println!();
+            println!("Model: {model}");
+            println!("{}", "-".repeat(7 + model.len()));
+            flush_stdout();
+
             let mut preds = Vec::new();
             let mut rf_split_counts: Vec<usize> = vec![0; cfg.enabled_features.len()];
-            for w in &windows {
+            for (window_pos, w) in windows.iter().enumerate() {
+                let window_started = Instant::now();
                 let train = &ds.rows[w.train_start_idx..=w.train_end_idx];
                 let test = &ds.rows[w.test_start_idx..=w.test_end_idx];
+                println!(
+                    "  Window {}/{} | train_rows={} | test_rows={} | train={}..{} | test={}..{}",
+                    window_pos + 1,
+                    windows.len(),
+                    train.len(),
+                    test.len(),
+                    w.train_start,
+                    w.train_end,
+                    w.test_start,
+                    w.test_end
+                );
+                flush_stdout();
+
                 match model.as_str() {
                     "ridge" => {
                         let mut p = models::ridge::evaluate(
@@ -48,10 +119,19 @@ pub fn run_forecast(cfg: &ForecastConfig) -> Result<(), String> {
                             cfg.ridge.standardize,
                             target,
                         );
+                        println!(
+                            "    ridge window {}/{} done | predictions={} | elapsed={:.1}s",
+                            window_pos + 1,
+                            windows.len(),
+                            p.len(),
+                            window_started.elapsed().as_secs_f64()
+                        );
+                        flush_stdout();
                         preds.append(&mut p);
                     }
                     "random_forest" => {
-                        let mut r = models::random_forest::evaluate(
+                        let label = format!("window {}/{}", window_pos + 1, windows.len());
+                        let mut r = models::random_forest::evaluate_with_progress(
                             train,
                             test,
                             cfg.random_forest.trees,
@@ -59,7 +139,16 @@ pub fn run_forecast(cfg: &ForecastConfig) -> Result<(), String> {
                             cfg.random_forest.min_samples_leaf,
                             cfg.random_forest.feature_subsample_ratio,
                             target,
+                            Some(&label),
                         );
+                        println!(
+                            "    random_forest window {}/{} done | predictions={} | elapsed={:.1}s",
+                            window_pos + 1,
+                            windows.len(),
+                            r.predictions.len(),
+                            window_started.elapsed().as_secs_f64()
+                        );
+                        flush_stdout();
                         preds.append(&mut r.predictions);
                         for (i, c) in r.split_counts.iter().enumerate() {
                             if let Some(slot) = rf_split_counts.get_mut(i) {
@@ -84,6 +173,14 @@ pub fn run_forecast(cfg: &ForecastConfig) -> Result<(), String> {
                 )?;
                 reports_written.push("random_forest_feature_importance.csv".to_string());
             }
+            println!(
+                "Model {model} complete | predictions={} | rmse={:.6} | corr={:.6} | elapsed={:.1}s",
+                preds.len(),
+                m.rmse,
+                m.correlation,
+                model_started.elapsed().as_secs_f64()
+            );
+            flush_stdout();
             eval_results.push(ModelEvaluationResult {
                 model_name: model.clone(),
                 metrics: m,
@@ -93,13 +190,21 @@ pub fn run_forecast(cfg: &ForecastConfig) -> Result<(), String> {
             });
         }
     }
-    println!(
-        "\nForecast research complete: wrote reports to {}",
-        cfg.reports_dir
-    );
+    println!();
+    println!("Reports Written");
+    println!("---------------");
     reports_written.push("model_comparison.json".to_string());
     reports_written.push("forecast_run_manifest.json".to_string());
+    for report in &reports_written {
+        println!("  - {report}");
+    }
     reports::write_comparison_and_manifest(&cfg.reports_dir, cfg, &eval_results, &reports_written)?;
+    println!(
+        "\nForecast research complete: wrote reports to {} | total_elapsed={:.1}s",
+        cfg.reports_dir,
+        run_started.elapsed().as_secs_f64()
+    );
+    flush_stdout();
     Ok(())
 }
 
@@ -122,6 +227,11 @@ fn print_plan(c: &ForecastConfig) {
     println!("Forecast Horizon : {}", c.forecast_horizon);
     println!("Models           : {}", c.enabled_models.join(", "));
     println!("Reports Dir      : {}", c.reports_dir);
+    flush_stdout();
+}
+
+fn flush_stdout() {
+    let _ = io::stdout().flush();
 }
 
 /// Formats a clean, actionable missing-data message matching the research
