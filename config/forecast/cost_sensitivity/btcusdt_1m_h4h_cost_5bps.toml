@@ -1,0 +1,70 @@
+[mode]
+run_mode = "forecast"
+dry_run = true
+
+[pairs]
+symbols = ["BTCUSDT"]
+source_timeframe = "1m"
+entry_timeframe = "1m"
+forecast_horizon = "4h"
+
+[data]
+data_dir = "data/historical"
+
+[historical_files]
+BTCUSDT = [
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2020.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2021.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2022.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2023.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2024.csv",
+  "data/historical/BTCUSDT/1m/BTCUSDT-1m-2025.csv",
+]
+
+[features]
+enabled = [
+  "return_1m",
+  "return_5m",
+  "return_15m",
+  "atr_bps",
+  "volume_ratio",
+  "vwap_distance_bps",
+  "ema_8_21_spread_bps",
+  "range_position",
+  "hour_of_day",
+  "day_of_week",
+]
+
+[label]
+target = "future_return_bps"
+horizon_bars = 240
+cost_adjusted = true
+
+[cost]
+taker_fee_bps = 1.5
+slippage_bps = 0.5
+spread_bps = 1.0
+market_impact_bps = 0.0
+stop_slippage_bps = 5.0
+
+[models]
+enabled = ["ridge"]
+
+[models.ridge]
+alpha = 1.0
+standardize = true
+
+[models.random_forest]
+trees = 100
+max_depth = 8
+min_samples_leaf = 50
+feature_subsample_ratio = 0.7
+
+[walk_forward]
+train_months = 12
+test_months = 3
+step_months = 3
+embargo_bars = 240
+
+[reports]
+reports_dir = "reports/forecast/cost_sensitivity/btcusdt_1m_h4h_cost_5bps"
