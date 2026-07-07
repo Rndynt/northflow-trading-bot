@@ -8,6 +8,10 @@
 //! Phase 6: backtest engine — COMPLETE
 //! Phase 7: reports and attribution — COMPLETE
 
+// Keep long-running hosted release logs focused on actionable forecast progress.
+// The remaining redundant-import warning is research-only and does not affect runtime behavior.
+#![allow(unused_imports)]
+
 pub mod advisor;
 pub mod backtest;
 pub mod config;
