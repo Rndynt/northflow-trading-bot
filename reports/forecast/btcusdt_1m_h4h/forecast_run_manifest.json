@@ -1,0 +1,22 @@
+{
+  "run_mode": "forecast",
+  "symbols": ["BTCUSDT"],
+  "source_timeframe": "1m",
+  "entry_timeframe": "1m",
+  "forecast_horizon": "4h",
+  "horizon_bars": 240,
+  "configured_target": "future_return_bps",
+  "effective_target": "future_return_after_cost_bps",
+  "cost_adjusted": true,
+  "enabled_features": ["return_1m", "return_5m", "return_15m", "atr_bps", "volume_ratio", "vwap_distance_bps", "ema_8_21_spread_bps", "range_position", "hour_of_day", "day_of_week"],
+  "enabled_models": ["ridge", "random_forest"],
+  "walk_forward": {
+    "train_months": 12,
+    "test_months": 3,
+    "step_months": 3,
+    "embargo_bars": 240,
+    "month_model": "fixed_30_day_months"
+  },
+  "reports_written": ["dataset_summary.json", "feature_summary.csv", "label_summary.json", "walk_forward_windows.csv", "ridge_summary.json", "ridge_prediction_buckets.csv", "ridge_walk_forward.csv", "random_forest_summary.json", "random_forest_prediction_buckets.csv", "random_forest_walk_forward.csv", "random_forest_feature_importance.csv", "model_comparison.json", "forecast_run_manifest.json"],
+  "limitations": ["source timeframe currently supports only 1m", "walk-forward months use fixed 30-day approximation", "classification target is not implemented", "forecast module does not emit production trading signals", "paper/live remain disabled"]
+}

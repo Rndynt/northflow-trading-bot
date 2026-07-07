@@ -1,0 +1,11 @@
+feature,split_count,importance,method
+return_1m,10185,0.01997071,split_count
+return_5m,17028,0.03338843,split_count
+return_15m,27125,0.05318659,split_count
+atr_bps,92294,0.18096969,split_count
+volume_ratio,15059,0.02952762,split_count
+vwap_distance_bps,105371,0.20661102,split_count
+ema_8_21_spread_bps,50160,0.09835352,split_count
+range_position,9995,0.01959815,split_count
+hour_of_day,101119,0.19827372,split_count
+day_of_week,81661,0.16012055,split_count

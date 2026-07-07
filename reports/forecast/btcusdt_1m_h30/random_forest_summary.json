@@ -1,0 +1,10 @@
+{
+  "mae": 27.96145034,
+  "rmse": 46.58033071,
+  "correlation": 0.03325657,
+  "directional_accuracy": 0.71518557,
+  "avg_predicted_bps": -13.68682985,
+  "avg_actual_bps": -13.74092480,
+  "avg_actual_after_cost_bps": -13.74092480,
+  "prediction_count": 2592000
+}

@@ -1,0 +1,40 @@
+{
+  "configured_target": "future_return_bps",
+  "effective_target": "future_return_after_cost_bps",
+  "horizon_bars": 60,
+  "models_compared": ["ridge", "random_forest"],
+  "best_model_by_rmse": "ridge",
+  "best_model_by_correlation": "ridge",
+  "best_model_by_top_decile_return": "ridge",
+  "recommendation": "reject_due_to_cost_adjusted_decay",
+  "models": [
+    {
+      "model_name": "ridge",
+      "prediction_count": 2592000,
+      "window_count": 20,
+      "mae": 39.43330921,
+      "rmse": 64.98835806,
+      "correlation": 0.03772052,
+      "directional_accuracy": 0.66095216,
+      "avg_predicted_bps": -13.45108548,
+      "avg_actual_bps": -13.49035954,
+      "avg_actual_after_cost_bps": -13.49035954,
+      "top_decile_avg_effective_actual_bps": -11.96930566,
+      "top_decile_hit_rate_after_cost": 0.44913194
+    },
+    {
+      "model_name": "random_forest",
+      "prediction_count": 2592000,
+      "window_count": 20,
+      "mae": 39.69831248,
+      "rmse": 65.26776953,
+      "correlation": 0.01369991,
+      "directional_accuracy": 0.65766782,
+      "avg_predicted_bps": -13.50683073,
+      "avg_actual_bps": -13.49035954,
+      "avg_actual_after_cost_bps": -13.49035954,
+      "top_decile_avg_effective_actual_bps": -12.57501030,
+      "top_decile_hit_rate_after_cost": 0.40711420
+    }
+  ]
+}
