@@ -350,6 +350,11 @@ In preferred order:
 Adding more complex models is **not** recommended before this horizon/label/
 regime iteration is done, consistent with the roadmap's guidance.
 
+## Follow-up
+
+Item 1 of the next-iteration list above (horizon comparison) is carried out
+in [`docs/forecast-ml-horizon-comparison.md`](./forecast-ml-horizon-comparison.md).
+
 ---
 
 ## Language check
