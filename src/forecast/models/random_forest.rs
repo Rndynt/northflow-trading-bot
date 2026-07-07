@@ -1,4 +1,5 @@
 use crate::forecast::{dataset::ForecastRow, metrics::Prediction};
+use std::io::{self, Write};
 
 #[derive(Debug, Clone)]
 enum Node {
@@ -30,6 +31,28 @@ pub fn evaluate(
     feature_subsample_ratio: f64,
     target: fn(&ForecastRow) -> f64,
 ) -> RandomForestEvaluation {
+    evaluate_with_progress(
+        train,
+        test,
+        trees,
+        max_depth,
+        min_leaf,
+        feature_subsample_ratio,
+        target,
+        None,
+    )
+}
+
+pub fn evaluate_with_progress(
+    train: &[ForecastRow],
+    test: &[ForecastRow],
+    trees: usize,
+    max_depth: usize,
+    min_leaf: usize,
+    feature_subsample_ratio: f64,
+    target: fn(&ForecastRow) -> f64,
+    progress_label: Option<&str>,
+) -> RandomForestEvaluation {
     if train.is_empty() || test.is_empty() || trees == 0 {
         return RandomForestEvaluation::default();
     }
@@ -37,23 +60,57 @@ pub fn evaluate(
     if n_features == 0 {
         return RandomForestEvaluation::default();
     }
+
+    if let Some(label) = progress_label {
+        println!(
+            "    RF {label}: start | trees={} max_depth={} min_leaf={} train_rows={} test_rows={}",
+            trees,
+            max_depth.max(1),
+            min_leaf.max(1),
+            train.len(),
+            test.len()
+        );
+        flush_stdout();
+    }
+
     let mut split_counts = vec![0usize; n_features];
-    let forest = (0..trees)
-        .map(|tree_id| {
-            let sample = deterministic_bootstrap(train.len(), tree_id);
-            build_tree(
-                train,
-                &sample,
-                max_depth.max(1),
-                min_leaf.max(1),
-                tree_id,
-                n_features,
-                feature_subsample_ratio,
-                target,
-                &mut split_counts,
-            )
-        })
-        .collect::<Vec<_>>();
+    let mut forest = Vec::with_capacity(trees);
+    let progress_every = (trees / 10).max(1);
+    for tree_id in 0..trees {
+        let sample = deterministic_bootstrap(train.len(), tree_id);
+        forest.push(build_tree(
+            train,
+            &sample,
+            max_depth.max(1),
+            min_leaf.max(1),
+            tree_id,
+            n_features,
+            feature_subsample_ratio,
+            target,
+            &mut split_counts,
+        ));
+
+        if let Some(label) = progress_label {
+            let built = tree_id + 1;
+            if built == 1 || built == trees || built % progress_every == 0 {
+                let pct = built as f64 * 100.0 / trees as f64;
+                let total_splits: usize = split_counts.iter().sum();
+                println!(
+                    "    RF {label}: built {built}/{trees} trees ({pct:.0}%) | splits={total_splits}"
+                );
+                flush_stdout();
+            }
+        }
+    }
+
+    if let Some(label) = progress_label {
+        println!(
+            "    RF {label}: predicting {} test rows from {} trees",
+            test.len(),
+            forest.len()
+        );
+        flush_stdout();
+    }
 
     let predictions = test
         .iter()
@@ -72,10 +129,21 @@ pub fn evaluate(
             }
         })
         .collect();
+
+    if let Some(label) = progress_label {
+        let total_splits: usize = split_counts.iter().sum();
+        println!("    RF {label}: done | total_splits={total_splits}");
+        flush_stdout();
+    }
+
     RandomForestEvaluation {
         predictions,
         split_counts,
     }
+}
+
+fn flush_stdout() {
+    let _ = io::stdout().flush();
 }
 
 fn build_tree(
