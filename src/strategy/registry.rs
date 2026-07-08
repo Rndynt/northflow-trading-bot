@@ -16,7 +16,7 @@ pub fn build_strategy_runtime(strategy_id: &str) -> Result<StrategyRuntime, Nort
         BASIC_SAMPLE_STRATEGY_ID => Box::new(BasicSampleStrategy),
         other => {
             return Err(NorthflowError::ConfigError(format!(
-                "unknown strategy_id: '{other}'. Available strategies: '{BASIC_SAMPLE_STRATEGY_ID}', '{TREND_REGIME_STRATEGY_ID}'"
+                "unknown strategy_id: '{other}'. Available strategies: '{BASIC_SAMPLE_STRATEGY_ID}'"
             )));
         }
     };
