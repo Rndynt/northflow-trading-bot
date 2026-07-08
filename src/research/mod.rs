@@ -302,8 +302,16 @@ fn run_symbol_strategy(
         .map_err(|e| format!("confirmation_timeframe: {e}"))?;
     let screening_tf = Timeframe::from_str(&cfg.screening_timeframe)
         .map_err(|e| format!("screening_timeframe: {e}"))?;
-    let store = CandleStore::build(load_result.candles, entry_tf, confirmation_tf, screening_tf)
-        .map_err(|e| format!("{e}"))?;
+    let regime_tf =
+        Timeframe::from_str(&cfg.regime_timeframe).map_err(|e| format!("regime_timeframe: {e}"))?;
+    let store = CandleStore::build(
+        load_result.candles,
+        entry_tf,
+        confirmation_tf,
+        screening_tf,
+        regime_tf,
+    )
+    .map_err(|e| format!("{e}"))?;
     if store.entry_candles.is_empty() {
         return Ok(None);
     }
@@ -317,6 +325,7 @@ fn run_symbol_strategy(
             entry: entry_tf,
             confirmation: confirmation_tf,
             screening: screening_tf,
+            regime: regime_tf,
         },
         backtest: BacktestConfig {
             initial_equity: cfg.initial_equity,
@@ -655,14 +664,26 @@ fn print_data_quality(
             return false;
         }
     };
-    let store =
-        match CandleStore::build(load_result.candles, entry_tf, confirmation_tf, screening_tf) {
-            Ok(s) => s,
-            Err(e) => {
-                println!("  Error building candle store: {e}");
-                return false;
-            }
-        };
+    let regime_tf = match crate::core::Timeframe::from_str(&cfg.regime_timeframe) {
+        Ok(tf) => tf,
+        Err(e) => {
+            println!("  Invalid regime_timeframe: {e}");
+            return false;
+        }
+    };
+    let store = match CandleStore::build(
+        load_result.candles,
+        entry_tf,
+        confirmation_tf,
+        screening_tf,
+        regime_tf,
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            println!("  Error building candle store: {e}");
+            return false;
+        }
+    };
 
     let dup_count = quality
         .issues
@@ -692,6 +713,10 @@ fn print_data_quality(
     out::key_value(
         &format!("Screen {} candles", store.screening_tf),
         out::format_int(store.screening_len()),
+    );
+    out::key_value(
+        &format!("Regime {} candles", store.regime_tf),
+        out::format_int(store.regime_len()),
     );
     out::key_value(
         "Data quality errors",

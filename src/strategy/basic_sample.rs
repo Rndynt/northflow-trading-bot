@@ -163,6 +163,7 @@ mod tests {
             entry_timeframe: Timeframe::OneMinute,
             confirmation_timeframe: Timeframe::FiveMinute,
             screening_timeframe: Timeframe::FifteenMinute,
+            regime_timeframe: Timeframe::OneHour,
         }
     }
 
@@ -172,6 +173,7 @@ mod tests {
             entry_lookback: vec![],
             confirmation_candle: candle(entry_close),
             screening_candle: candle(entry_close),
+            regime_candle: candle(entry_close),
             entry_indicators: IndicatorSnapshot {
                 ema_8: Some(101.0),
                 ema_21: Some(100.0),
@@ -184,6 +186,11 @@ mod tests {
                 ..Default::default()
             },
             screening_indicators: IndicatorSnapshot {
+                ema_50: Some(100.0),
+                ..Default::default()
+            },
+            regime_indicators: IndicatorSnapshot {
+                vwap: Some(100.0),
                 ema_50: Some(100.0),
                 ..Default::default()
             },

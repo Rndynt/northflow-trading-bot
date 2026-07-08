@@ -1,10 +1,7 @@
 //! Strategy registry for research/backtest runs.
 
 use crate::core::NorthflowError;
-use crate::strategy::{
-    ids::{BASIC_SAMPLE_STRATEGY_ID},
-    BasicSampleStrategy, Strategy,
-};
+use crate::strategy::{ids::BASIC_SAMPLE_STRATEGY_ID, BasicSampleStrategy, Strategy};
 
 pub struct StrategyRuntime {
     pub strategy_id: String,

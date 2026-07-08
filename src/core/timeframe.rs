@@ -1,9 +1,11 @@
 //! Timeframe — trading bar period with explicit role semantics.
 //!
-//! Three roles are configurable (no longer fixed to specific values):
+//! Four roles are configurable (no longer fixed to specific values):
 //!   - `entry_timeframe`        — entry and execution (e.g. "1m", "5m")
 //!   - `confirmation_timeframe` — intermediate confirmation (e.g. "5m", "1h")
-//!   - `screening_timeframe`    — market regime / bias (e.g. "15m", "4h")
+//!   - `screening_timeframe`    — additional multi-timeframe confluence (e.g. "15m", "4h")
+//!   - `regime_timeframe`       — market regime classification (e.g. "1h", "4h"),
+//!     independent of the other three
 //!
 //! Supported timeframes: 1m, 5m, 15m, 30m, 1h, 4h
 

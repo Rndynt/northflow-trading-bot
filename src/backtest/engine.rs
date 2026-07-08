@@ -44,6 +44,7 @@ pub struct TimeframeRoles {
     pub entry: Timeframe,
     pub confirmation: Timeframe,
     pub screening: Timeframe,
+    pub regime: Timeframe,
 }
 
 pub struct BacktestRunInput<'a> {
@@ -114,6 +115,7 @@ impl BacktestEngine {
         let entry_tf = timeframes.entry;
         let confirmation_tf = timeframes.confirmation;
         let screening_tf = timeframes.screening;
+        let regime_tf = timeframes.regime;
 
         // Precompute confirmation-TF snapshots (no-lookahead lookup at eval time).
         let mut eng_conf = IndicatorEngine::new_default()?;
@@ -129,6 +131,15 @@ impl BacktestEngine {
         for &c in &store.screening_candles {
             let snap = eng_screen.next(c)?;
             snaps_screen.push((c.timestamp, snap, c));
+        }
+
+        // Precompute regime-TF snapshots — independent role, typically a
+        // higher timeframe, used only for market-regime classification.
+        let mut eng_regime = IndicatorEngine::new_default()?;
+        let mut snaps_regime: Vec<(i64, IndicatorSnapshot, Candle)> = Vec::new();
+        for &c in &store.regime_candles {
+            let snap = eng_regime.next(c)?;
+            snaps_regime.push((c.timestamp, snap, c));
         }
 
         // ── Main replay loop ──────────────────────────────────────────────────
@@ -331,13 +342,17 @@ impl BacktestEngine {
                         candle.timestamp + entry_tf.to_millis() - confirmation_tf.to_millis();
                     let max_screen_ts =
                         candle.timestamp + entry_tf.to_millis() - screening_tf.to_millis();
+                    let max_regime_ts =
+                        candle.timestamp + entry_tf.to_millis() - regime_tf.to_millis();
                     let confirmation_snapshot = latest_snap(&snaps_conf, max_conf_ts);
                     let screening_snapshot = latest_snap(&snaps_screen, max_screen_ts);
+                    let regime_snapshot = latest_snap(&snaps_regime, max_regime_ts);
 
                     if let (
                         Some((_, confirmation_indicators, confirmation_candle)),
                         Some((_, screening_indicators, screening_candle)),
-                    ) = (confirmation_snapshot, screening_snapshot)
+                        Some((_, regime_indicators, regime_candle)),
+                    ) = (confirmation_snapshot, screening_snapshot, regime_snapshot)
                     {
                         let estimated_cost = cost_cfg.taker_fee_bps * 2.0
                             + cost_cfg.slippage_bps * 2.0
@@ -350,6 +365,7 @@ impl BacktestEngine {
                             entry_timeframe: entry_tf,
                             confirmation_timeframe: confirmation_tf,
                             screening_timeframe: screening_tf,
+                            regime_timeframe: regime_tf,
                         };
                         let entry_lookback =
                             entry_lookback_for(entry_candles, i, entry_lookback_bars);
@@ -358,9 +374,11 @@ impl BacktestEngine {
                             entry_lookback,
                             confirmation_candle: *confirmation_candle,
                             screening_candle: *screening_candle,
+                            regime_candle: *regime_candle,
                             entry_indicators: entry_snapshot.clone(),
                             confirmation_indicators: confirmation_indicators.clone(),
                             screening_indicators: screening_indicators.clone(),
+                            regime_indicators: regime_indicators.clone(),
                         };
 
                         let action =
@@ -416,14 +434,17 @@ impl BacktestEngine {
                     candle.timestamp + entry_tf.to_millis() - confirmation_tf.to_millis();
                 let max_screen_ts =
                     candle.timestamp + entry_tf.to_millis() - screening_tf.to_millis();
+                let max_regime_ts = candle.timestamp + entry_tf.to_millis() - regime_tf.to_millis();
 
                 let confirmation_snapshot = latest_snap(&snaps_conf, max_conf_ts);
                 let screening_snapshot = latest_snap(&snaps_screen, max_screen_ts);
+                let regime_snapshot = latest_snap(&snaps_regime, max_regime_ts);
 
                 if let (
                     Some((_, confirmation_indicators, confirmation_candle)),
                     Some((_, screening_indicators, screening_candle)),
-                ) = (confirmation_snapshot, screening_snapshot)
+                    Some((_, regime_indicators, regime_candle)),
+                ) = (confirmation_snapshot, screening_snapshot, regime_snapshot)
                 {
                     let estimated_cost = cost_cfg.taker_fee_bps * 2.0
                         + cost_cfg.slippage_bps * 2.0
@@ -437,6 +458,7 @@ impl BacktestEngine {
                         entry_timeframe: entry_tf,
                         confirmation_timeframe: confirmation_tf,
                         screening_timeframe: screening_tf,
+                        regime_timeframe: regime_tf,
                     };
 
                     let entry_lookback = entry_lookback_for(entry_candles, i, entry_lookback_bars);
@@ -446,9 +468,11 @@ impl BacktestEngine {
                         entry_lookback,
                         confirmation_candle: *confirmation_candle,
                         screening_candle: *screening_candle,
+                        regime_candle: *regime_candle,
                         entry_indicators: entry_snapshot.clone(),
                         confirmation_indicators: confirmation_indicators.clone(),
                         screening_indicators: screening_indicators.clone(),
+                        regime_indicators: regime_indicators.clone(),
                     };
 
                     match strategy.evaluate(&ctx, &input) {
@@ -829,7 +853,8 @@ mod tests {
         let entry = Timeframe::from_str("1m").unwrap();
         let confirmation = Timeframe::from_str("5m").unwrap();
         let screening = Timeframe::from_str("15m").unwrap();
-        let store = CandleStore::build(candles, entry, confirmation, screening).unwrap();
+        let regime = Timeframe::from_str("1h").unwrap();
+        let store = CandleStore::build(candles, entry, confirmation, screening, regime).unwrap();
         BacktestRunInput {
             symbol: Symbol::new("BTCUSDT").unwrap(),
             store,
@@ -837,6 +862,7 @@ mod tests {
                 entry,
                 confirmation,
                 screening,
+                regime,
             },
             backtest: BacktestConfig {
                 initial_equity: 5000.0,

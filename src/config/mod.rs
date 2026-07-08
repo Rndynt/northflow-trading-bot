@@ -4,6 +4,12 @@
 //!   entry_timeframe        = "1m"
 //!   screening_timeframe    = "15m"
 //!   confirmation_timeframe = "5m"
+//!   regime_timeframe       = "1h"
+//!
+//! entry/confirmation/screening may be tuned freely, including all being set
+//! to the same timeframe. regime_timeframe is an independent role — typically
+//! a higher timeframe used only for market-regime classification — and only
+//! needs to be at least as long as entry_timeframe.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -12,7 +18,7 @@ use std::{
 };
 
 use crate::core::{NorthflowError, Timeframe};
-use crate::strategy::ids::{BASIC_SAMPLE_STRATEGY_ID};
+use crate::strategy::ids::BASIC_SAMPLE_STRATEGY_ID;
 
 #[derive(Debug, Clone)]
 pub struct ResearchConfig {
@@ -20,6 +26,7 @@ pub struct ResearchConfig {
     pub entry_timeframe: String,
     pub screening_timeframe: String,
     pub confirmation_timeframe: String,
+    pub regime_timeframe: String,
     pub data_dir: String,
     pub source_timeframe: String,
     pub historical_files: HashMap<String, Vec<PathBuf>>,
@@ -53,6 +60,7 @@ impl Default for ResearchConfig {
             entry_timeframe: "1m".to_string(),
             screening_timeframe: "15m".to_string(),
             confirmation_timeframe: "5m".to_string(),
+            regime_timeframe: "1h".to_string(),
             data_dir: "data/historical".to_string(),
             source_timeframe: "1m".to_string(),
             historical_files: HashMap::new(),
@@ -264,14 +272,26 @@ impl ResearchConfig {
         let screening = Timeframe::from_str(&self.screening_timeframe).map_err(|e| {
             NorthflowError::ConfigError(format!("screening_timeframe invalid: {e}"))
         })?;
-        if entry == confirmation || entry == screening || confirmation == screening {
-            return Err(NorthflowError::ConfigError(format!("all three timeframe roles must be distinct: entry={entry}, confirmation={confirmation}, screening={screening}")));
+        let regime = Timeframe::from_str(&self.regime_timeframe)
+            .map_err(|e| NorthflowError::ConfigError(format!("regime_timeframe invalid: {e}")))?;
+        // entry/confirmation/screening may be tuned freely, including all
+        // being set to the same timeframe — only require they not go
+        // "backwards" (entry no longer than confirmation, confirmation no
+        // longer than screening).
+        if entry > confirmation {
+            return Err(NorthflowError::ConfigError(format!("entry_timeframe ({entry}) must not be longer than confirmation_timeframe ({confirmation})")));
         }
-        if entry >= confirmation {
-            return Err(NorthflowError::ConfigError(format!("entry_timeframe ({entry}) must be shorter than confirmation_timeframe ({confirmation})")));
+        if confirmation > screening {
+            return Err(NorthflowError::ConfigError(format!("confirmation_timeframe ({confirmation}) must not be longer than screening_timeframe ({screening})")));
         }
-        if confirmation >= screening {
-            return Err(NorthflowError::ConfigError(format!("confirmation_timeframe ({confirmation}) must be shorter than screening_timeframe ({screening})")));
+        // regime_timeframe is an independent role (typically a higher
+        // timeframe used only for regime classification); it only needs to
+        // be at least as long as entry_timeframe, with no required relation
+        // to confirmation/screening.
+        if regime < entry {
+            return Err(NorthflowError::ConfigError(format!(
+                "regime_timeframe ({regime}) must not be shorter than entry_timeframe ({entry})"
+            )));
         }
         Ok(())
     }
@@ -319,6 +339,13 @@ fn apply_toml_value(cfg: &mut ResearchConfig, value: &toml::Value) {
         .and_then(|v| v.as_str())
     {
         cfg.confirmation_timeframe = v.to_string();
+    }
+    if let Some(v) = get("pairs", "regime_timeframe")
+        .or_else(|| get("timeframes", "regime_timeframe"))
+        .or_else(|| value.get("regime_timeframe"))
+        .and_then(|v| v.as_str())
+    {
+        cfg.regime_timeframe = v.to_string();
     }
     if let Some(v) = get("data", "source_timeframe").and_then(|v| v.as_str()) {
         cfg.source_timeframe = v.to_string();
@@ -551,15 +578,38 @@ strategies = ["basic_sample_strategy"]
     }
 
     #[test]
-    fn rejects_invalid_timeframe_roles() {
+    fn accepts_equal_entry_confirmation_screening_timeframes() {
+        // Decoupled regime role means entry/confirmation/screening no longer
+        // need to be distinct.
         let mut cfg = ResearchConfig::default();
         cfg.entry_timeframe = "5m".to_string();
         cfg.confirmation_timeframe = "5m".to_string();
-        cfg.screening_timeframe = "1h".to_string();
-        assert!(cfg.validate_timeframes().is_err());
+        cfg.screening_timeframe = "5m".to_string();
+        cfg.regime_timeframe = "1h".to_string();
+        assert!(cfg.validate_timeframes().is_ok());
+    }
+
+    #[test]
+    fn rejects_invalid_timeframe_roles() {
+        let mut cfg = ResearchConfig::default();
         cfg.entry_timeframe = "15m".to_string();
         cfg.confirmation_timeframe = "5m".to_string();
         assert!(cfg.validate_timeframes().is_err());
+        cfg.entry_timeframe = "1m".to_string();
+        cfg.confirmation_timeframe = "1h".to_string();
+        cfg.screening_timeframe = "15m".to_string();
+        assert!(cfg.validate_timeframes().is_err());
+    }
+
+    #[test]
+    fn rejects_regime_timeframe_shorter_than_entry() {
+        let mut cfg = ResearchConfig::default();
+        cfg.entry_timeframe = "15m".to_string();
+        cfg.confirmation_timeframe = "15m".to_string();
+        cfg.screening_timeframe = "15m".to_string();
+        cfg.regime_timeframe = "5m".to_string();
+        let err = cfg.validate_timeframes().unwrap_err().to_string();
+        assert!(err.contains("regime_timeframe"));
     }
 
     #[test]

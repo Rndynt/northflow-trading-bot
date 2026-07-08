@@ -29,6 +29,10 @@ pub struct StrategyContext {
     pub confirmation_timeframe: Timeframe,
     /// Screening timeframe for this run (e.g. 15m, 4h).
     pub screening_timeframe: Timeframe,
+    /// Regime timeframe for this run — independent of entry/confirmation/
+    /// screening, typically a higher timeframe (e.g. 1h, 4h) used only for
+    /// market-regime classification.
+    pub regime_timeframe: Timeframe,
 }
 
 // ── MultiTimeframeInput ───────────────────────────────────────────────────────
@@ -50,12 +54,17 @@ pub struct MultiTimeframeInput {
     pub confirmation_candle: Candle,
     /// Screening-timeframe candle at the evaluation moment.
     pub screening_candle: Candle,
+    /// Regime-timeframe candle at the evaluation moment — independent role,
+    /// typically a higher timeframe, for market-regime classification only.
+    pub regime_candle: Candle,
     /// Indicator snapshot computed from the entry-timeframe candle stream.
     pub entry_indicators: IndicatorSnapshot,
     /// Indicator snapshot computed from the confirmation-timeframe candle stream.
     pub confirmation_indicators: IndicatorSnapshot,
     /// Indicator snapshot computed from the screening-timeframe candle stream.
     pub screening_indicators: IndicatorSnapshot,
+    /// Indicator snapshot computed from the regime-timeframe candle stream.
+    pub regime_indicators: IndicatorSnapshot,
 }
 
 // ── PositionAction ────────────────────────────────────────────────────────────

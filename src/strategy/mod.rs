@@ -5,10 +5,11 @@
 //!     Backtested with realistic risk sizing on 6yr BTCUSDT 1m data: negative
 //!     expectancy (see docs/executable-signal-lifecycle-audit.md). Kept as a
 //!     baseline for comparison, not recommended for live use as-is.
-//!   - `trend_regime_strategy` — regime-gated trend strategy. Classifies
-//!     screening-timeframe regime first, skips non-trending periods entirely,
-//!     then requires entry-timeframe momentum/value-area to agree, with a
-//!     wider 2:1 reward:risk than basic_sample_strategy.
+//!
+//! `MultiTimeframeInput` carries four independent timeframe roles per
+//! evaluation: entry, confirmation, screening (all tunable freely, including
+//! all being the same timeframe), and regime (typically a higher timeframe,
+//! for market-context classification via `market::classify_basic_regime`).
 //!
 //! Strategies emit `Signal` only. They must not place orders, size positions,
 //! call exchanges, mutate account state, or write reports.
@@ -20,4 +21,3 @@ pub mod traits;
 
 pub use basic_sample::BasicSampleStrategy;
 pub use traits::{MultiTimeframeInput, PositionAction, Strategy, StrategyContext};
-
