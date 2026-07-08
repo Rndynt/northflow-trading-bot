@@ -162,6 +162,17 @@ tidak di-commit.
 
 ## Iterasi strategi #1 dan #2 — `trend_regime_strategy`
 
+> **Catatan: `trend_regime_strategy` sudah dihapus dari kode** (project
+> owner secara eksplisit menghapusnya — regime seharusnya jadi input yang
+> bisa dipakai strategi manapun, bukan strategi tersendiri; lihat
+> `market::classify_basic_regime` dan `regime_timeframe` di
+> `MultiTimeframeInput`/`StrategyContext`). Bagian di bawah ini dipertahankan
+> sebagai catatan riwayat eksperimen (angka-angka nyata yang pernah didapat),
+> bukan sebagai dokumentasi strategi aktif. Mekanisme `audit_position` yang
+> dites lewat strategi ini **tetap ada** di engine (`Strategy::audit_position`,
+> `PositionAction`) sebagai kapabilitas generik, terlepas dari strategi mana
+> yang memakainya.
+
 Setelah audit di atas, dibuat strategi aktif kedua, `trend_regime_strategy`
 (`src/strategy/trend_regime.rs`), untuk menguji langsung permintaan pemilik
 project: klasifikasi regime dulu (pakai `classify_basic_regime` yang sudah

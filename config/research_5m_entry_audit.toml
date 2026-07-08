@@ -44,7 +44,7 @@ market_impact_bps = 1.0
 stop_slippage_bps = 5.0
 
 [backtest]
-reports_dir = "reports/trend_regime_5m_entry_2020_2025"
+reports_dir = "reports/basic_sample_5m_entry_audit_2020_2025"
 conservative_intrabar = true
 max_bars_held = 36
 entry_geometry_mode = "reanchor_to_actual_entry"
