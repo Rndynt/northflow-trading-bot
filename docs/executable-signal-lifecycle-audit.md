@@ -157,3 +157,85 @@ Tidak ada perubahan pada logika strategi, backtest engine, risk guard, atau
 model cost. Perubahan hanya: (1) file config baru `config/research_sane_risk.toml`
 untuk perbandingan sizing, (2) dokumen ini. `reports/` tetap gitignored dan
 tidak di-commit.
+
+---
+
+## Iterasi strategi #1 dan #2 — `trend_regime_strategy`
+
+Setelah audit di atas, dibuat strategi aktif kedua, `trend_regime_strategy`
+(`src/strategy/trend_regime.rs`), untuk menguji langsung permintaan pemilik
+project: klasifikasi regime dulu (pakai `classify_basic_regime` yang sudah
+ada, dari screening timeframe), baru evaluasi entry. Diuji berdampingan
+dengan `basic_sample_strategy` lewat `strategy_run_mode = "comparison"`
+(`config/research_strategy_comparison.toml`), data dan risk sizing identik
+(`risk_per_trade_pct = 1.0`, `max_drawdown_pct = 20.0`).
+
+**Aturan `trend_regime_strategy`**: skip total kalau regime screening-timeframe
+`Ranging`/`Unknown`. Kalau `Bullish`/`Bearish`, perlu entry-timeframe
+EMA-8/EMA-21 dan posisi close vs VWAP setuju arah regime tsb.
+
+### Versi 1 — stop 1x ATR, TP 2x ATR (RR 2.0)
+
+| Metrik | basic_sample_strategy | trend_regime_strategy v1 |
+|---|---|---|
+| total_trades | 68 | 70 |
+| win_rate | 47.06% | 38.57% |
+| profit_factor | 0.499 | 0.514 |
+| expectancy/trade | -14.04 | -14.45 |
+| avg_expected_edge_bps | 22.04 | 29.74 |
+| avg_actual_edge_bps | -10.58 | -10.54 |
+| avg_edge_realization_bps | -32.62 | -40.28 |
+
+Hasil: **hampir identik dengan basic_sample**, regime-gating + RR lebih lebar
+tidak mengubah tanda expectancy.
+
+### Versi 2 — stop 2x ATR, TP 4x ATR (RR tetap 2.0, jarak diperlebar)
+
+Hipotesis diuji: apakah stop 1x ATR terlalu sempit untuk noise candle 1-menit
+BTCUSDT, sehingga sering kena SL sebelum tren beneran jalan?
+
+| Metrik | trend_regime_strategy v1 (stop sempit) | trend_regime_strategy v2 (stop lebar) |
+|---|---|---|
+| total_trades | 70 | 71 |
+| win_rate | 38.57% | 35.21% |
+| profit_factor | 0.514 | 0.410 |
+| expectancy/trade | -14.45 | -14.24 |
+| avg_edge_realization_bps | -40.28 | **-43.25 (lebih buruk)** |
+
+**Hipotesis ini terbukti salah** — memperlebar stop tidak memperbaiki apapun,
+malah realisasi edge sedikit lebih buruk. Kesimpulan: bukan soal stop
+kesempitan.
+
+### Temuan teknis konkret yang relevan untuk iterasi berikutnya
+
+`stop_slippage_bps = 5.0` di `[cost]` hanya dibebankan pada exit via
+stop-loss (`src/backtest/engine.rs:608`), sementara `expected_reward_bps`/
+`expected_net_edge_bps` yang dihitung strategi memakai `estimated_cost_bps`
+flat, tidak membedakan skenario menang/kalah. Dengan win rate di bawah 50%
+untuk kedua strategi yang diuji, biaya ekstra ini secara sistematis lebih
+sering kena di trade yang rugi — salah satu kontributor konkret ke gap
+avg_edge_realization_bps yang selalu negatif besar (-33 sampai -43 bps) di
+ketiga varian yang sudah diuji (basic_sample, trend_regime v1, trend_regime
+v2).
+
+### Kesimpulan sementara setelah 3 varian diuji
+
+Tiga strategi/varian berbeda (basic_sample, trend_regime v1, trend_regime v2)
+semuanya menunjukkan pola yang sama: expectancy negatif, profit_factor di
+bawah 1, dan gap besar antara edge yang "diharapkan" vs yang "terealisasi".
+Ini indikasi bahwa masalahnya bukan di pemilihan arah (long/short) atau lebar
+stop, tapi kemungkinan di salah satu dari:
+
+1. Frekuensi entry yang terlalu tinggi relatif terhadap horizon 1-menit,
+   sehingga terlalu banyak entry di titik yang secara statistik tidak punya
+   edge (konsisten dengan temuan riset ML sebelumnya bahwa sinyal di
+   horizon pendek sangat lemah setelah cost).
+2. Cost asimetris (stop_slippage_bps hanya kena saat rugi) yang belum
+   dimasukkan ke perhitungan "expected edge" strategi.
+3. ATR(14) di 1-menit terlalu reaktif terhadap noise jangka pendek untuk
+   dijadikan basis stop/TP yang stabil.
+
+**Belum ada strategi dengan expectancy positif ditemukan.** Iterasi
+selanjutnya yang lebih masuk akal untuk dicoba: menaikkan entry-timeframe
+(mis. dari 1m ke 5m/15m, mengurangi jumlah entry tapi menyaring noise),
+bukan terus mengubah stop/TP di timeframe 1-menit yang sama.

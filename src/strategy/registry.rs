@@ -1,7 +1,10 @@
 //! Strategy registry for research/backtest runs.
 
 use crate::core::NorthflowError;
-use crate::strategy::{ids::BASIC_SAMPLE_STRATEGY_ID, BasicSampleStrategy, Strategy};
+use crate::strategy::{
+    ids::{BASIC_SAMPLE_STRATEGY_ID, TREND_REGIME_STRATEGY_ID},
+    BasicSampleStrategy, Strategy, TrendRegimeStrategy,
+};
 
 pub struct StrategyRuntime {
     pub strategy_id: String,
@@ -11,9 +14,10 @@ pub struct StrategyRuntime {
 pub fn build_strategy_runtime(strategy_id: &str) -> Result<StrategyRuntime, NorthflowError> {
     let strategy: Box<dyn Strategy> = match strategy_id {
         BASIC_SAMPLE_STRATEGY_ID => Box::new(BasicSampleStrategy),
+        TREND_REGIME_STRATEGY_ID => Box::new(TrendRegimeStrategy),
         other => {
             return Err(NorthflowError::ConfigError(format!(
-                "unknown strategy_id: '{other}'. Available strategy: '{BASIC_SAMPLE_STRATEGY_ID}'"
+                "unknown strategy_id: '{other}'. Available strategies: '{BASIC_SAMPLE_STRATEGY_ID}', '{TREND_REGIME_STRATEGY_ID}'"
             )));
         }
     };
@@ -33,6 +37,13 @@ mod tests {
         let runtime = build_strategy_runtime(BASIC_SAMPLE_STRATEGY_ID).unwrap();
         assert_eq!(runtime.strategy_id, BASIC_SAMPLE_STRATEGY_ID);
         assert_eq!(runtime.strategy.strategy_id(), BASIC_SAMPLE_STRATEGY_ID);
+    }
+
+    #[test]
+    fn trend_regime_strategy_resolves() {
+        let runtime = build_strategy_runtime(TREND_REGIME_STRATEGY_ID).unwrap();
+        assert_eq!(runtime.strategy_id, TREND_REGIME_STRATEGY_ID);
+        assert_eq!(runtime.strategy.strategy_id(), TREND_REGIME_STRATEGY_ID);
     }
 
     #[test]
