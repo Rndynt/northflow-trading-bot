@@ -7,6 +7,7 @@ symbols = ["BTCUSDT"]
 entry_timeframe = "1m"
 screening_timeframe = "15m"
 confirmation_timeframe = "5m"
+regime_timeframe = "1h"
 
 [data]
 source_timeframe = "1m"
@@ -48,5 +49,5 @@ conservative_intrabar = true
 max_bars_held = 18
 entry_geometry_mode = "reanchor_to_actual_entry"
 entry_lookback_bars = 120
-strategy_run_mode = "comparison"
-strategies = ["basic_sample_strategy", "trend_regime_strategy"]
+strategy_run_mode = "single"
+strategies = ["basic_sample_strategy"]

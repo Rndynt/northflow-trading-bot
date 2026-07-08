@@ -7,6 +7,7 @@ symbols = ["BTCUSDT"]
 entry_timeframe = "1m"
 screening_timeframe = "15m"
 confirmation_timeframe = "5m"
+regime_timeframe = "1h"
 
 [data]
 source_timeframe = "1m"
