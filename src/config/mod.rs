@@ -12,7 +12,7 @@ use std::{
 };
 
 use crate::core::{NorthflowError, Timeframe};
-use crate::strategy::ids::{BASIC_SAMPLE_STRATEGY_ID, TREND_REGIME_STRATEGY_ID};
+use crate::strategy::ids::{BASIC_SAMPLE_STRATEGY_ID};
 
 #[derive(Debug, Clone)]
 pub struct ResearchConfig {
@@ -119,7 +119,7 @@ impl ResearchConfig {
     pub fn validate_strategy_config(&self) -> Result<(), NorthflowError> {
         if crate::strategy::registry::build_strategy_runtime(&self.strategy_id).is_err() {
             return Err(NorthflowError::ConfigError(format!(
-                "unknown strategy_id: '{}'. Available strategies: '{BASIC_SAMPLE_STRATEGY_ID}', '{TREND_REGIME_STRATEGY_ID}'",
+                "unknown strategy_id: '{}'. Available strategies: '{BASIC_SAMPLE_STRATEGY_ID}'",
                 self.strategy_id
             )));
         }
@@ -136,7 +136,7 @@ impl ResearchConfig {
         for strategy in &self.strategies {
             if crate::strategy::registry::build_strategy_runtime(strategy).is_err() {
                 return Err(NorthflowError::ConfigError(format!(
-                    "unknown strategy in strategies list: '{strategy}'. Available strategies: '{BASIC_SAMPLE_STRATEGY_ID}', '{TREND_REGIME_STRATEGY_ID}'"
+                    "unknown strategy in strategies list: '{strategy}'. Available strategies: '{BASIC_SAMPLE_STRATEGY_ID}'"
                 )));
             }
             if !seen.insert(strategy.as_str()) {
