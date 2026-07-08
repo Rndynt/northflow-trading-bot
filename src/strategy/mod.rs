@@ -17,8 +17,7 @@ pub mod basic_sample;
 pub mod ids;
 pub mod registry;
 pub mod traits;
-pub mod trend_regime;
 
 pub use basic_sample::BasicSampleStrategy;
 pub use traits::{MultiTimeframeInput, PositionAction, Strategy, StrategyContext};
-pub use trend_regime::TrendRegimeStrategy;
+
