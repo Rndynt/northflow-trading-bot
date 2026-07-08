@@ -30,7 +30,7 @@
 use crate::core::{NorthflowError, Side, Signal, SignalId, StrategyId};
 use crate::market::{classify_basic_regime, MarketRegime};
 use crate::strategy::ids::TREND_REGIME_STRATEGY_ID;
-use crate::strategy::traits::{MultiTimeframeInput, Strategy, StrategyContext};
+use crate::strategy::traits::{MultiTimeframeInput, PositionAction, Strategy, StrategyContext};
 
 #[derive(Debug, Clone)]
 pub struct TrendRegimeStrategy;
@@ -153,6 +153,39 @@ impl Strategy for TrendRegimeStrategy {
         signal.validate()?;
         Ok(Some(signal))
     }
+
+    /// Audit posisi: re-check the screening-timeframe regime every bar while
+    /// a position from this strategy is open. If the regime that originally
+    /// justified entry has flipped to the opposite direction (or degraded to
+    /// Ranging/Unknown), close now rather than waiting passively for a static
+    /// stop-loss/take-profit/time-exit level.
+    fn audit_position(
+        &self,
+        _ctx: &StrategyContext,
+        input: &MultiTimeframeInput,
+        open_side: Side,
+    ) -> PositionAction {
+        let regime = classify_basic_regime(
+            input.screening_candle.close,
+            input.screening_indicators.vwap,
+            input.screening_indicators.ema_50,
+        );
+
+        let regime_still_supports_side = match open_side {
+            Side::Long => regime == MarketRegime::Bullish,
+            Side::Short => regime == MarketRegime::Bearish,
+        };
+
+        if regime_still_supports_side {
+            PositionAction::Hold
+        } else {
+            PositionAction::CloseNow {
+                reason: format!(
+                    "screening regime no longer supports open {open_side:?} position (now {regime})"
+                ),
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -269,5 +302,30 @@ mod tests {
         let mut i = input(102.0, 105.0);
         i.entry_indicators.atr_14 = Some(f64::NAN);
         assert!(TrendRegimeStrategy.evaluate(&ctx(), &i).unwrap().is_none());
+    }
+
+    #[test]
+    fn audit_holds_when_regime_still_supports_open_side() {
+        // screening close above both vwap/ema_50 -> bullish, matches Long.
+        let i = input(102.0, 105.0);
+        let action = TrendRegimeStrategy.audit_position(&ctx(), &i, Side::Long);
+        assert_eq!(action, PositionAction::Hold);
+    }
+
+    #[test]
+    fn audit_closes_when_regime_flips_against_open_side() {
+        // screening close above both vwap/ema_50 -> bullish, but position is Short.
+        let i = input(102.0, 105.0);
+        let action = TrendRegimeStrategy.audit_position(&ctx(), &i, Side::Short);
+        assert!(matches!(action, PositionAction::CloseNow { .. }));
+    }
+
+    #[test]
+    fn audit_closes_when_regime_degrades_to_ranging() {
+        let mut i = input(102.0, 100.0);
+        i.screening_indicators.vwap = Some(98.0);
+        i.screening_indicators.ema_50 = Some(103.0);
+        let action = TrendRegimeStrategy.audit_position(&ctx(), &i, Side::Long);
+        assert!(matches!(action, PositionAction::CloseNow { .. }));
     }
 }

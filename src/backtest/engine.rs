@@ -36,7 +36,7 @@ use crate::core::{
 use crate::indicators::{IndicatorEngine, IndicatorSnapshot};
 use crate::market::CandleStore;
 use crate::risk::{CostModelConfig, RiskConfig, RiskContext, RiskEngine};
-use crate::strategy::{MultiTimeframeInput, Strategy, StrategyContext};
+use crate::strategy::{MultiTimeframeInput, PositionAction, Strategy, StrategyContext};
 use std::time::Instant;
 
 #[derive(Debug, Clone, Copy)]
@@ -317,6 +317,76 @@ impl BacktestEngine {
                     });
                     trades.push(trade);
                     closed_this_bar = true;
+                }
+            }
+
+            // ── B2. Audit open position (strategy-driven early close) ─────────
+            // The "audit posisi" step of the screening → entry → audit → action
+            // cycle. Runs only when block B's static SL/TP/TimeExit check found
+            // no exit this bar. Uses the same no-lookahead confirmation/
+            // screening snapshot rule as strategy evaluation (block C).
+            if !closed_this_bar {
+                if let Some(ref pos) = open_position {
+                    let max_conf_ts =
+                        candle.timestamp + entry_tf.to_millis() - confirmation_tf.to_millis();
+                    let max_screen_ts =
+                        candle.timestamp + entry_tf.to_millis() - screening_tf.to_millis();
+                    let confirmation_snapshot = latest_snap(&snaps_conf, max_conf_ts);
+                    let screening_snapshot = latest_snap(&snaps_screen, max_screen_ts);
+
+                    if let (
+                        Some((_, confirmation_indicators, confirmation_candle)),
+                        Some((_, screening_indicators, screening_candle)),
+                    ) = (confirmation_snapshot, screening_snapshot)
+                    {
+                        let estimated_cost = cost_cfg.taker_fee_bps * 2.0
+                            + cost_cfg.slippage_bps * 2.0
+                            + cost_cfg.spread_bps;
+                        let audit_ctx = StrategyContext {
+                            symbol: symbol_obj.clone(),
+                            signal_index: signal_counter + 1,
+                            estimated_cost_bps: estimated_cost,
+                            min_confidence,
+                            entry_timeframe: entry_tf,
+                            confirmation_timeframe: confirmation_tf,
+                            screening_timeframe: screening_tf,
+                        };
+                        let entry_lookback =
+                            entry_lookback_for(entry_candles, i, entry_lookback_bars);
+                        let audit_input = MultiTimeframeInput {
+                            entry_candle: candle,
+                            entry_lookback,
+                            confirmation_candle: *confirmation_candle,
+                            screening_candle: *screening_candle,
+                            entry_indicators: entry_snapshot.clone(),
+                            confirmation_indicators: confirmation_indicators.clone(),
+                            screening_indicators: screening_indicators.clone(),
+                        };
+
+                        let action =
+                            strategy.audit_position(&audit_ctx, &audit_input, pos.signal.side);
+                        if let PositionAction::CloseNow { .. } = action {
+                            let exit = FillModel::strategy_close_exit(
+                                pos,
+                                &candle,
+                                cost_cfg.slippage_bps,
+                                cost_cfg.taker_fee_bps,
+                            );
+                            let trade = build_trade(pos, &exit, symbol_obj.clone(), &cost_cfg);
+                            equity += trade.net_pnl;
+                            daily_realized_pnl += trade.net_pnl;
+                            peak_equity = peak_equity.max(equity);
+                            let dd = drawdown_pct(peak_equity, equity);
+
+                            equity_curve.push(EquityPoint {
+                                timestamp: candle.timestamp,
+                                equity,
+                                drawdown_pct: dd,
+                            });
+                            trades.push(trade);
+                            closed_this_bar = true;
+                        }
+                    }
                 }
             }
 

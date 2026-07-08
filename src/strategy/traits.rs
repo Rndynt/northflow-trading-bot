@@ -5,7 +5,7 @@
 //!   - Strategies must not call exchange APIs, LLMs, or mutate account state.
 //!   - Output is Result<Option<Signal>, NorthflowError> — a Signal, not an order.
 
-use crate::core::{Candle, NorthflowError, Signal, Symbol, Timeframe};
+use crate::core::{Candle, NorthflowError, Side, Signal, Symbol, Timeframe};
 use crate::indicators::IndicatorSnapshot;
 
 // ── StrategyContext ───────────────────────────────────────────────────────────
@@ -58,6 +58,21 @@ pub struct MultiTimeframeInput {
     pub screening_indicators: IndicatorSnapshot,
 }
 
+// ── PositionAction ────────────────────────────────────────────────────────────
+
+/// Decision produced by [`Strategy::audit_position`] once per entry-timeframe
+/// bar while a position opened by this strategy is still open — the
+/// "screening → entry → audit posisi → action" cycle's audit/action step.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PositionAction {
+    /// Keep holding. Static stop-loss/take-profit/time-exit levels set at
+    /// entry continue to apply unchanged.
+    Hold,
+    /// Close the position now, at this bar's close, before any static exit
+    /// level is reached. Recorded as `TradeExitReason::ManualClose`.
+    CloseNow { reason: String },
+}
+
 // ── Strategy trait ────────────────────────────────────────────────────────────
 
 /// A deterministic, stateless signal generator.
@@ -74,6 +89,9 @@ pub trait Strategy {
 
     /// Evaluate one multi-timeframe input and optionally emit a signal.
     ///
+    /// Only called while this strategy has no open position (see
+    /// `audit_position` for the open-position cycle).
+    ///
     /// Returns:
     ///   - `Ok(None)`       — conditions not met; no signal.
     ///   - `Ok(Some(sig))`  — all conditions met; signal ready for risk review.
@@ -83,4 +101,23 @@ pub trait Strategy {
         ctx: &StrategyContext,
         input: &MultiTimeframeInput,
     ) -> Result<Option<Signal>, NorthflowError>;
+
+    /// Called once per entry-timeframe bar while a position opened by this
+    /// strategy is open, after the static stop-loss/take-profit/time-exit
+    /// check for this bar has already found no exit. Lets a strategy
+    /// proactively close a position when the original reason for entering no
+    /// longer holds (e.g. the regime that justified entry has flipped),
+    /// instead of always waiting passively for a price level or bar-count
+    /// timeout.
+    ///
+    /// Default: always `Hold` — preserves pure static-bracket-order behavior
+    /// for strategies that do not override this.
+    fn audit_position(
+        &self,
+        _ctx: &StrategyContext,
+        _input: &MultiTimeframeInput,
+        _open_side: Side,
+    ) -> PositionAction {
+        PositionAction::Hold
+    }
 }

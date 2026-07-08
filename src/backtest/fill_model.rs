@@ -157,6 +157,27 @@ impl FillModel {
         )
     }
 
+    /// Exit triggered by [`crate::strategy::PositionAction::CloseNow`] — the
+    /// strategy's own "audit posisi" decision, at this bar's close, before any
+    /// static stop-loss/take-profit/time-exit level was reached. Recorded as
+    /// `TradeExitReason::ManualClose`.
+    pub fn strategy_close_exit(
+        pos: &OpenSimPosition,
+        candle: &Candle,
+        slippage_bps: f64,
+        taker_fee_bps: f64,
+    ) -> ExitFill {
+        Self::make_exit_fill(
+            pos,
+            candle.timestamp,
+            candle.close,
+            TradeExitReason::ManualClose,
+            slippage_bps,
+            taker_fee_bps,
+            pos.bars_held,
+        )
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     fn base_price(reason: TradeExitReason, sl: f64, tp: f64, close: f64) -> f64 {

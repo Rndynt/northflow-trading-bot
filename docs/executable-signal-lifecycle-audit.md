@@ -239,3 +239,84 @@ stop, tapi kemungkinan di salah satu dari:
 selanjutnya yang lebih masuk akal untuk dicoba: menaikkan entry-timeframe
 (mis. dari 1m ke 5m/15m, mengurangi jumlah entry tapi menyaring noise),
 bukan terus mengubah stop/TP di timeframe 1-menit yang sama.
+
+---
+
+## Iterasi #3 — cycle "screening → entry → audit posisi → action" (real, bukan cuma config)
+
+Pemilik project secara eksplisit meminta: entry-timeframe minimal 5 menit,
+DAN jangan asal generate sinyal tiap bar, tapi ada siklus screening → entry
+→ **audit posisi** (selama posisi terbuka, terus dicek apakah masih valid)
+→ action (hold/close).
+
+**Yang sudah otomatis benar tanpa perubahan kode**: engine
+(`src/backtest/engine.rs`) memang sudah tidak pernah mengevaluasi sinyal
+baru selama ada posisi terbuka (`open_position.is_none()` adalah syarat
+sebelum `strategy.evaluate()` dipanggil) — jadi "jangan entry tiap bar" itu
+sudah otomatis benar begitu `max_open_positions = 1`.
+
+**Yang genuinely belum ada dan baru dibangun sekarang**: "audit posisi" —
+sebelumnya, begitu posisi terbuka, satu-satunya cara keluar adalah level
+statis (SL/TP) atau time-exit; tidak ada pengecekan aktif ulang tiap bar.
+Ditambahkan:
+
+- `Strategy::audit_position(ctx, input, open_side) -> PositionAction`
+  (`src/strategy/traits.rs`) — dipanggil oleh engine sekali per bar
+  entry-timeframe selama posisi terbuka, SETELAH pengecekan SL/TP/time-exit
+  statis tidak menemukan exit di bar itu. Default: selalu `Hold` (strategi
+  lama tidak berubah perilakunya kalau tidak override method ini).
+- `PositionAction::{Hold, CloseNow { reason }}` — kalau `CloseNow`, posisi
+  ditutup saat itu juga di harga close bar tsb, dicatat sebagai
+  `TradeExitReason::ManualClose` (`FillModel::strategy_close_exit`,
+  `src/backtest/fill_model.rs`).
+- `trend_regime_strategy` sekarang override `audit_position`: tiap bar,
+  cek ulang regime screening-timeframe. Kalau regime yang jadi alasan masuk
+  sudah berbalik (atau melemah jadi Ranging/Unknown), tutup posisi sekarang
+  — tidak menunggu SL/TP kena.
+
+Ini genuinely capability baru di execution engine, bukan sekadar ganti
+config, dan sudah diuji (`cargo test`, 447 test lulus, termasuk 3 test baru
+untuk `audit_position`).
+
+### Hasil dengan entry_timeframe = 5m, confirmation = 15m, screening = 1h
+
+(`config/research_5m_entry_audit.toml`, risk sizing sama:
+`risk_per_trade_pct = 1.0`, `max_drawdown_pct = 20.0`)
+
+| Metrik | basic_sample (5m entry) | trend_regime (5m entry + audit) |
+|---|---|---|
+| total_trades | 56 | 68 |
+| win_rate | 42.86% | 35.29% |
+| profit_factor | 0.345 | 0.536 |
+| expectancy/trade | **-17.77** (lebih buruk dari versi 1m: -14.04) | -14.96 |
+| avg_edge_realization_bps | -34.48 | **-81.04 (jauh lebih buruk dari versi 1m: -40.28)** |
+
+Breakdown exit reason `trend_regime_strategy`: 35 stop_loss, 18 take_profit,
+15 time_exit, **0 manual_close**. Artinya mekanisme audit posisi sudah
+terpasang dan aktif dicek tiap bar, tapi **regime screening-timeframe (1h)
+jarang benar-benar berbalik dalam durasi tahan posisi rata-rata (11-36 bar
+5-menit ≈ 1-3 jam)** — jadi belum pernah memicu penutupan dini di dataset ini.
+
+### Kesimpulan jujur setelah 4 varian diuji
+
+Memperlambat entry-timeframe ke 5m **tidak memperbaiki, malah memperburuk**
+gap antara edge yang diharapkan vs terealisasi (-81 bps vs -40 bps di 1m).
+Basic_sample_strategy juga lebih buruk di 5m (-17.77) dibanding versi 1m-nya
+(-14.04). Empat varian yang sudah diuji (basic_sample 1m, trend_regime v1,
+trend_regime v2, trend_regime 5m+audit) semuanya menunjukkan expectancy
+negatif di kisaran serupa (-14 sampai -18 per trade dari $5.000 modal, risk
+1%/trade).
+
+Ini konsisten dengan temuan riset ML forecast jauh sebelumnya
+(`docs/forecast-ml-result-analysis.md`): sinyal cost-adjusted di BTCUSDT
+1-menit sampai 4-jam sama-sama lemah setelah biaya realistis. Indikasinya
+makin kuat bahwa masalahnya bukan di timeframe, lebar stop, atau mekanisme
+audit posisi — kemungkinan besar di **logika entry itu sendiri** (trend
+alignment EMA/VWAP sederhana) yang belum punya edge nyata di BTCUSDT pada
+periode 2020-2025 ini, di timeframe manapun yang sudah dicoba.
+
+**Rekomendasi jujur**: sebelum mencoba parameter lain lagi di keluarga
+strategi trend-following yang sama, pertimbangkan untuk menguji jenis logika
+entry yang benar-benar berbeda (misalnya mean-reversion, atau breakout
+dengan konfirmasi volume, bukan variasi dari trend-alignment EMA/VWAP yang
+sudah 4 kali diuji dengan hasil serupa).
